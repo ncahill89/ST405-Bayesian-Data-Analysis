@@ -1,0 +1,90 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Module Information"
+output:
+  output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Information
+
+\footnotesize 
+
+**Office:** Room 223, Logic House
+
+**Email:** niamh.cahill@mu.ie
+
+**Lectures:** Mondays @11am in CB1 (Callan Building) and Tuesdays @10am in Physics Hall (PH). 
+
+**Tutorials:** Wednesday 3pm and 4pm, GFLAB, beginning in week 5 (Oct 17th).
+
+**Assessment:** 4 Assignments worth 25% and a Final exam worth 75%.
+
+**Textbooks:** Doing Bayesian Data Analysis by J K. Kruschke. 
+Bayesian Data Analysis by A Gelman et al.
+
+**Office Hours:**  Wednesday 2-3:00pm (Online) or Thursday 2-4:00pm.
+
+## Lecturing Format
+
+\footnotesize
+-   Lecture notes will be provided but please take additional notes as needed.
+
+-   All course materials will be available on Moodle.
+
+-   Lectures will be a mixture of theory and practical examples.
+
+-   R code will be provided in addition to lecture notes, where relevant.
+
+-   Please ask questions.
+
+## What is this course about?
+\footnotesize
+
+-   The goal of this course is to introduce you to Bayesian Data Analysis (BDA).
+
+-   BDA relies on two foundational ideas
+
+    -   The first idea behind Bayesian inference is the updating of uncertainty across possibilities.
+    
+    -  The second idea is that parameter values are given probability distributions, known as "prior" distributions.
+
+    
+"How often have I said to you that when you have eliminated the impossible, whatever remains, however improbable, must be the truth" - Sherlock Holmes (fictional character)
+
+  
+## What topics will we cover?
+
+\footnotesize
+
+This course will cover (but is not limited to) the following topics:
+
+-   Bayes' Rule
+-   Inferring a Binomial Probability
+-   Prior Distributions
+-   Markov Chain Monte Carlo
+-   Gibbs Sampler
+-   Assessing Model Convergence
+-   JAGS
+-   Simple Models with JAGS
+-   Hierarchical Models with JAGS
+-   Model Checking
+
+## Diversity & inclusion
+
+\footnotesize
+
+It is my intent to present materials and activities that are respectful of diversity: gender identity, sexuality, disability, age, socioeconomic status, ethnicity, race, nationality, religion, and culture. I may not always get this right so please let me know ways to improve the effectiveness of the course for you personally, or for other students or student groups.
+
+To help with this: 
+
+  - If you have a name that differs from those that appear in your official University records, please let me know!
+
+  - Please let me know your preferred pronouns if you wish to do so.
+
+  - I (like many people) am still in the process of learning about diverse perspectives and identities. If something was said in class (by anyone) that made you feel uncomfortable, please talk to me about it.
+
