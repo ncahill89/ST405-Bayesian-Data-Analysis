@@ -106,11 +106,9 @@ $$\underset{\text{posterior}}{P(\theta|Y)} = \frac{\underset{\text{likelihood}}{
 
 Where the denominator is
 
-$P(Y) = \sum_{\theta^*}P(Y|\theta^*)P(\theta^*)$ for discrete-valued
-variables, or
+$P(Y) = \sum_{\theta^*}P(Y|\theta^*)P(\theta^*)$ for discrete-valued variables, or
 
-$P(Y) = \int P(Y|\theta^*)P(\theta^*) d\theta^*$ for continuous
-variables.
+$P(Y) = \int P(Y|\theta^*)P(\theta^*) d\theta^*$ for continuous variables.
 
 $P(Y)$ is often difficult to calculate (more on this later) and Baye’s
 rule is often written more simply as a proportional statement
