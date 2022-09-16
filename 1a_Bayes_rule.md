@@ -1,7 +1,7 @@
-Bayesian Data Analysis
+Bayesian Data Analysis - Bayes’ Rule
 ================
 Dr Niamh Cahill (she/her)
-Bayes’ Rule
+
 
 ## Bayes’ rule
 
