@@ -6,4 +6,5 @@ Includes:
 0. Module Information
 
 1a. Bayes' Rule
+
 1b. Happiness Example
