@@ -3,7 +3,7 @@ Materials for my Bayesian Data Analysis module - Semester 1, 2022.
 
 Includes:
 
-  - 0. Module Information
+  - Module Information
 
   - 1a. Bayes' Rule
 
