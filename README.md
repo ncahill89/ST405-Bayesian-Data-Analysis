@@ -1,5 +1,5 @@
 # ST405-Bayesian-Data-Analysis
-Materials for my Bayesian Data Analysis module - Semester 1, 2022.
+Materials for Bayesian Data Analysis - Maynooth University, Semester 1, 2022.
 
 Includes:
 
