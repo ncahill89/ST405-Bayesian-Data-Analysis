@@ -95,7 +95,7 @@ $$\underset{\text{posterior}}{P(\theta|y)} = \frac{\underset{\text{likelihood}}{
 
 What is $P(y)$?
 
-$$P(y) = P(y|\theta^*)P(\theta^*)$$
+$$P(y) = P(y|\theta^* )P(\theta^* )$$
 
 So for $k = 0,0.1,0.2,\ldots,1$, $Pr(\theta = k) = 1/11$ (i.e., all are
 equally likely)
