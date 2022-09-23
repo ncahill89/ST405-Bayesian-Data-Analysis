@@ -1,7 +1,7 @@
-Bayesian Data Analysis
+Bayesian Data Analysis - Inferring a Binomial Probability
 ================
 Dr Niamh Cahill (she/her)
-Inferring a Binomial Probability
+
 
 ## Recall: Bayes’ rule
 
