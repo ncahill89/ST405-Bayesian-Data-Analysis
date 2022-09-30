@@ -1,7 +1,7 @@
-Bayesian Analysis
+Bayesian Analysis - Inference for the Beta Posterior
 ================
-Dr Niamh Cahill
-Bayesian Inference
+Dr Niamh Cahill (she/her)
+
 
 ## Bayesian Inference
 
