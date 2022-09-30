@@ -111,7 +111,7 @@ p_y <- (1/n_grid)*(sum(dbinom(14, 20, prob = theta)))
 ```
 
 
-## R code 
+## Appendix: R code 
 
 ```{r}
 # load libraries
