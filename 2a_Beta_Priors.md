@@ -171,9 +171,10 @@ ptheta_dat2 <- ptheta_dat %>%
                              values_to = "value") %>%
                 mutate(type = factor(type, 
                        levels =c("Prior","Likelihood","Posterior"))) %>% 
-                mutate(type = recode_factor(type, `Prior` = "theta %~% Be(a,b)", 
-                      `Likelihood` = "y %~% Binomial(n,theta)",
-                       `Posterior` = "theta %~% Be(y+a,n-y+b)"))
+                mutate(type = recode_factor(type, 
+                `Prior` = "theta %~% Be(a,b)", 
+                `Likelihood` = "y %~% Binomial(n,theta)",
+                `Posterior` = "theta %~% Be(y+a,n-y+b)"))
 
 # plot prior, likelihood, posterior
 ggplot(ptheta_dat2, aes(x = theta, y = value)) +
