@@ -117,7 +117,7 @@ p_y <- (1/n_grid)*(sum(dbinom(14, 20, prob = theta)))
 # load libraries
 library(tidyverse)
 
-n_grid = 100 # grid size for theta
+n_grid = 11 # grid size for theta
 theta <- seq(0,1,length = n_grid) # grid of theta values
 
 Prior <- pmin(theta, 1-theta) # triangular shape for the prior

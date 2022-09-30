@@ -131,3 +131,53 @@ $Var(\theta) = \frac{ab}{(a+b)^2(a+b+1)} = 0.1^2$
 
 We can use these equations to solve for $a$ and $b$, the parameters of
 the Beta prior.
+
+## Appendix: R code
+
+```{r}
+library(tidyverse)
+
+# Beta parameters (prior)
+a <- 14
+b <- 9
+
+n_grid = 1000 # grid size 
+theta <- seq(0,1,length = n_grid) # grid of theta values
+Prior <- dbeta(theta,a,b) # get the prior distribution
+
+# create a dataset
+ptheta_dat <- tibble::tibble(theta, Prior)
+
+# plot prior
+ggplot(ptheta_dat, aes(x = theta, y = Prior)) +
+  geom_line()
+
+# data
+y <- 14
+n <- 20
+
+# Binomial likelihood for the data
+Likelihood <- dbinom(y,n,prob = theta)
+ptheta_dat$Likelihood <- Likelihood
+
+# Beta posterior (note change of parameters from the prior)
+Posterior <- dbeta(theta,y+a,n-y+b)
+ptheta_dat$Posterior <- Posterior # add to the dataset
+
+# format for plotting
+ptheta_dat2 <- ptheta_dat %>% 
+                pivot_longer(cols = Prior:Posterior,
+                             names_to = "type",
+                            values_to = "value") %>%
+                mutate(type = factor(type, 
+                       levels =c("Prior","Likelihood","Posterior"))) %>% 
+  mutate(type = recode_factor(type, `Prior` = "theta %~% Be(a,b)", `Likelihood` = "y %~% Binomial(n,theta)",`Posterior` = "theta %~% Be(y+a,n-y+b)"))
+
+# plot prior, likelihood, posterior
+ggplot(ptheta_dat2, aes(x = theta, y = value)) +
+  geom_line() +
+  facet_wrap(~type, label = "label_parsed", nrow = 3, scales = "free_y") +
+  xlab(expression(theta)) +
+  ylab("") +
+  theme_bw() 
+```
