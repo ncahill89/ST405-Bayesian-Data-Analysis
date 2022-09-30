@@ -1,0 +1,189 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Inferring a Binomial Probability"
+output:
+  slidy_presentation: default
+  beamer_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+```
+
+
+## Recall: Bayes' rule
+
+\footnotesize
+
+Given a set of observed data points $y$ and a set of parameters $\theta$, we write Bayes' rule as
+
+$$\underset{\text{posterior}}{P(\theta|y)} = \frac{\underset{\text{likelihood}}{P(y|\theta)}\underset{\text{prior}}{P(\theta)}}{\underset{\text{marginal likelihood}}{P(y)}}$$
+and as a proportional statement
+
+$$\underset{\text{posterior}}{P(\theta|Y)} \propto \underset{\text{likelihood}}{P(Y|\theta)}\underset{\text{prior}}{P(\theta)}$$
+
+We will now consider an example that will build some intuition for how prior distributions and data interact to produce posterior distributions. 
+
+## The Happiness example
+
+\footnotesize
+
+Suppose females, aged 65+ in a general social survey were asked about being happy. If this is a representative sample of the population of women, what is the probability that a 65+ woman is happy?
+
+__What is our goal?__
+To estimate the probability that a 65+ woman is happy. This is an unknown parameter which we'll call $\theta$.
+
+__What data do we have?__ 
+Data: n = 20 women, y = 14 women reported being happy
+ 
+__How do we do Bayesian inference for $\theta$?__
+  
+  - Decide on a descriptive model for the data (i.e., the likelihood) with meaningful parameter(s), $\theta$ (e.g., the probability a 65+ woman is happy).
+  
+  - Information about $\theta$ will be summarized in a prior probability distribution
+    
+  - and updated using the data, via the likelihood, to obtain the posterior distribution for the parameters using Bayes' rule. 
+  
+## Likelihood function - $p(y|\theta)$
+
+\footnotesize
+
+__Data:__ n = 20 women, y = 14 women reported being happy
+  
+We will assume that $y$ is Binomial$(\theta,n)$ such that
+  
+  $$p(y|\theta) = c\theta^y(1-\theta)^{n-y} \text{ with } c = {n \choose y}$$
+  
+We'll refer to $y|\theta \sim Bin(\theta,n)$ as the data model (or the likelihood). It tells us how the data are related to the parameter(s) we want to estimate.  
+    
+## Prior distribution - $p(\theta)$
+
+\footnotesize
+
+Now that we've defined the data model, the next step is to establish a prior distribution over the parameter values. 
+
+  - Let's start simple and assume $\theta$ can only take on values k =  $0,0.1,0.2,\ldots,1$. 
+  
+  - Suppose that we believe that $\theta$ is most likely to be 0.5 and we assign lower weight to $\theta$ values far above or below 0.5. 
+  
+  - A prior distribution incorporating these beliefs might look like
+  
+```{r, fig.height= 3, fig.width=6}
+n_grid = 11
+theta <- seq(0,1,length = n_grid) # grid of theta values
+Prior <- pmin(theta, 1-theta) # triangular shape
+Prior = Prior/sum(Prior) # make sum to 1
+
+ptheta_dat <- tibble::tibble(theta, Prior)
+
+ggplot(ptheta_dat, aes(x = theta, y = Prior)) +
+  geom_segment(aes(xend=theta,yend=0)) +
+  xlab(expression(theta)) +
+  ylab(expression(p(theta))) +
+  theme_bw()
+
+```
+
+
+## Likelihood & Prior
+
+\footnotesize
+Given that y = 14 and n = 20 with $\frac{y}{n} = 0.7$, which $\theta$ out of $0,0.1,0.2,\ldots,1$ do you expect to have the largest value of the likelihood function? 
+
+
+```{r,fig.height= 4, fig.width=6}
+Likelihood <- dbinom(14,20,prob = theta)
+ptheta_dat$Likelihood <- Likelihood
+
+
+ptheta_dat2 <- ptheta_dat %>% pivot_longer(cols = Prior:Likelihood,
+                                      names_to = "type",
+                                      values_to = "value") %>%
+  mutate(type = factor(type, levels =c("Prior","Likelihood")))
+
+ggplot(ptheta_dat2, aes(x = theta, y = value)) +
+  geom_segment(aes(xend=theta,yend=0)) +
+  facet_wrap(~type, scales = "free_y", nrow = 2) +
+  xlab(expression(theta)) +
+  ylab("") +
+  theme_bw()
+```
+
+## Posterior distribution - $\underset{\text{posterior}}{P(\theta|Y)} \propto \underset{\text{likelihood}}{P(Y|\theta)}\underset{\text{prior}}{P(\theta)}$
+
+
+```{r, fig.height= 5, fig.width=6}
+Posterior <- Likelihood*Prior
+ptheta_dat$Posterior <- Posterior
+
+
+ptheta_dat2 <- ptheta_dat %>% pivot_longer(cols = Prior:Posterior,
+                                      names_to = "type",
+                                      values_to = "value") %>%
+  mutate(type = factor(type, levels =c("Prior","Likelihood","Posterior")))
+
+ggplot(ptheta_dat2, aes(x = theta, y = value)) +
+  geom_segment(aes(xend=theta,yend=0)) +
+  facet_wrap(~type, scales = "free_y", nrow = 3) +
+  xlab(expression(theta)) +
+  ylab("") +
+  theme_bw()
+
+```
+
+## Changing prior assumptions
+\footnotesize
+Instead of the "triangular" prior let's make a more uniform assumption. So for $k =  0,0.1,0.2,\ldots,1$,  $Pr(\theta = k) = 1/11$ (i.e., all are equally likely).
+
+```{r, fig.height= 5, fig.width=6}
+n_grid = 11
+theta <- seq(0,1,length = n_grid) # grid of theta values
+Prior <- 1/n_grid
+ptheta_dat <- tibble::tibble(theta, Prior)
+
+Likelihood <- dbinom(14,20,prob = theta)
+ptheta_dat$Likelihood <- Likelihood
+
+Posterior <- Likelihood*Prior
+ptheta_dat$Posterior <- Posterior
+
+
+ptheta_dat2 <- ptheta_dat %>% pivot_longer(cols = Prior:Posterior,
+                                      names_to = "type",
+                                      values_to = "value") %>%
+  mutate(type = factor(type, levels =c("Prior","Likelihood","Posterior")))
+
+ggplot(ptheta_dat2, aes(x = theta, y = value)) +
+  geom_segment(aes(xend=theta,yend=0)) +
+  facet_wrap(~type, scales = "free_y", nrow = 3) +
+  xlab(expression(theta)) +
+  ylab("") +
+  theme_bw()
+```
+
+## Marginal likelihood - $p(y)$
+
+\footnotesize
+
+Recall: $$\underset{\text{posterior}}{P(\theta|y)} = \frac{\underset{\text{likelihood}}{P(y|\theta)}\underset{\text{prior}}{P(\theta)}}{\underset{\text{marginal likelihood}}{P(y)}}$$
+
+What is $P(y)$?
+
+$$P(y) = \sum_{\theta^*} P(y|\theta^*)P(\theta^*)$$
+
+So for $k =  0,0.1,0.2,\ldots,1$,  $Pr(\theta = k) = 1/11$ (i.e., all are equally likely)
+
+$P(y) = p(y|\theta = 0)Pr(\theta = 0) +  P(y|\theta = 0.1)Pr(\theta = 0.1) + \ldots  = 0.04$
+
+__To do this in R:__ 
+
+```{r, echo = TRUE}
+n_grid = 11
+theta <- seq(0,1,length = n_grid) 
+p_y <- (1/n_grid)*(sum(dbinom(14, 20, prob = theta)))
+```
+
+
+
