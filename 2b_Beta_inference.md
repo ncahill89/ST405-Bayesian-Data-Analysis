@@ -55,7 +55,8 @@ qbeta(c(0.025,0.5,0.975),a_post,b_post)
     simulation.
 
 -   Based on the law of large numbers we know that:
-    $\frac{1}{S}\sum_{s=1}^{S}\theta^{(s)} = E(\theta)$ as sample size
+
+    $\frac{1}{S} \sum_{s=1}^{S}\theta^{(s)} = E(\theta)$ as sample size
     $S \to \infty$
 
     -   The error in the MC approximation goes to zero as $S \to \infty$
