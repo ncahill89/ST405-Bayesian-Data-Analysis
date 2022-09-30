@@ -109,3 +109,39 @@ n_grid = 11
 theta <- seq(0,1,length = n_grid) 
 p_y <- (1/n_grid)*(sum(dbinom(14, 20, prob = theta)))
 ```
+
+
+## R code 
+
+```{r}
+# load libraries
+library(tidyverse)
+
+n_grid = 100 # grid size for theta
+theta <- seq(0,1,length = n_grid) # grid of theta values
+
+Prior <- pmin(theta, 1-theta) # triangular shape for the prior
+Prior <- Prior/sum(Prior) # make sum to 1
+
+Likelihood <- dbinom(14,20,prob = theta) # evaluate likelihood for each value of theta 
+
+Posterior <- Likelihood*Prior # get the posterior
+
+# create a tibble 
+ptheta_dat <- tibble::tibble(theta, Prior, Likelihood, Posterior)
+
+# change to long format for plotting
+ptheta_long <- ptheta_dat %>% 
+                pivot_longer(cols = Prior:Posterior,
+                             names_to = "type",
+                             values_to = "value") %>%
+  mutate(type = factor(type, levels =c("Prior","Likelihood","Posterior")))
+
+# plot
+ggplot(ptheta_long, aes(x = theta, y = value)) +
+  geom_segment(aes(xend=theta,yend=0)) +
+  facet_wrap(~type, scales = "free_y", nrow = 3) +
+  xlab(expression(theta)) +
+  ylab("") +
+  theme_bw()
+```
