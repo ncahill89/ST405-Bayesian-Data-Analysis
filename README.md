@@ -13,4 +13,4 @@ Includes:
   
   - 2b. Beta Inference
   
-  - 3a. Single Parameter Normal
+  - 3a&b. Single Parameter Normal
