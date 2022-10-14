@@ -73,3 +73,97 @@ $\tau|y \sim Gamma \bigg(a + n/2, b + 1/2 \sum_{i=1}^n (y_i - \mu)^2\bigg)$
 
 -   Result: Through simulation from the posterior for $\sigma$ we find
     $\hat{\sigma} = 20.23$, 95% CI: (18.96, 21.63)
+    
+## Appendix: R code
+
+```{r}
+library(rstanarm)
+library(tidyverse)
+
+y <- kidiq$kid_score
+n <- length(y)
+
+#-------------------
+# exact solutions
+# prior and posterior for mu, conditional on sigma (assuming sigma = sd.y)
+sd.y<- 20.4
+
+# prior parameters
+mu0 <- 80
+sigma0 <- 10
+
+# Posterior of mu, assuming sigma = sd.y (sample SD)
+mupost.mean = (n*mean(y)/(sd.y^2) + mu0/(sigma0^2))/(n/(sd.y^2) + 1/(sigma0^2))
+mupost.sd = sqrt(1/(n/(sd.y^2) + 1/(sigma0^2)))
+
+# Credible interval
+lwr <- qnorm(0.05, mean = mupost.mean, sd = mupost.sd)
+upr <- qnorm(0.95, mean = mupost.mean, sd = mupost.sd)
+
+# set up for plotting
+mu_grid <- seq(50,120)
+mu_prior <- dnorm(mu_grid,mu0,sigma0)
+mu_posterior <- dnorm(mu_grid,mupost.mean,mupost.sd)
+
+mu_res <- tibble::tibble(mu_grid, mu_prior,mu_posterior) %>% 
+  tidyr::pivot_longer(-mu_grid,
+                      names_to = "distribution",
+                      values_to = "value") %>% 
+  dplyr::mutate(distribution = factor(distribution, levels = c("mu_prior", "mu_posterior")))
+
+# plot prior and posterior
+ggplot(mu_res, aes(x = mu_grid, y = value, colour = distribution)) +
+  geom_line() +
+  labs(colour = "") +
+  facet_wrap(~distribution, scales = "free_y") +
+  ylab("Density") +
+  xlab(expression(mu))
+
+
+#-------------------
+# exact solutions
+# prior and posterior for tau, conditional on mu (assuming mu = ybar)
+mu.y <- 87
+
+# prior parameters
+a <- 2
+b <- 4
+
+# Posterior of tau
+post.a = a + n/2
+post.b = b + 1/2*(sum((y-mu.y)^2))
+
+sqrt(1/(post.a/post.b))
+
+# Credible intervals
+lwr <- qgamma(0.025, post.a, post.b)
+upr <- qgamma(0.975, post.a, post.b)
+
+# Set up for plotting
+tau_grid <- seq(0,3,by = 0.01)
+tau_prior <- dgamma(tau_grid,a,b)
+tau_posterior <- dgamma(tau_grid,post.a,post.b)
+
+tau_res <- tibble::tibble(tau_grid, tau_prior,tau_posterior) %>% 
+  tidyr::pivot_longer(-tau_grid,
+                      names_to = "distribution",
+                      values_to = "value") %>% 
+  dplyr::mutate(distribution = factor(distribution, levels = c("tau_prior", "tau_posterior")))
+
+# plot prior and posterior
+ggplot(tau_res, aes(x = tau_grid, y = value, colour = distribution)) +
+  geom_line() +
+  labs(colour = "") +
+  ylab("Density")+
+  xlab(expression(tau))+
+  facet_wrap(~distribution, scales = "free_y")
+
+# sample from the posterior for tau
+tau_samps <- rgamma(10000,post.a,post.b)
+plot(density(tau_samps))
+
+# get sigma samples and summaries
+sigma_samps <- sqrt(1/tau_samps)
+plot(density(sigma_samps))
+quantile(sigma_samps, probs = c(0.025,0.5,0.975))
+```
