@@ -151,7 +151,7 @@ if(theta_pro<0|theta_pro>1){r <- 0 } # set to zero if theta outside [0,1]
 else {
   r <- 
 min(1,dbinom(14,20,theta_pro)*dbeta(theta_pro,a,b)/
-      dbinom(14,20,theta_cur[i])*dbeta(theta_cur[i],a,b))
+      (dbinom(14,20,theta_cur[i])*dbeta(theta_cur[i],a,b)))
   }
 # 3. 
 u <- runif(1,0,1)
