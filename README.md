@@ -8,3 +8,9 @@ Includes:
   - 1a. Bayes' Rule
 
   - 1b. Happiness Example
+  
+  - 2a. Beta Priors
+  
+  - 2b. Beta Inference
+  
+  - 3. Single Parameter Normal
