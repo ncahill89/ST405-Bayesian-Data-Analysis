@@ -62,7 +62,7 @@ $p(\tau|y) \propto p(y|\tau)p(\tau)$
 
 -   The posterior will also be a gamma distribution
 
-$\tau|y \sim Gamma \bigg(a + n/2, b + 1/2\sum_{i=1}^n (y_i - \mu)^2\bigg)$
+$\tau|y \sim Gamma \bigg(a + n/2, b + 1/2 \sum_{i=1}^n (y_i - \mu)^2\bigg)$
 
 ## Prior vs Posterior for $\tau$
 
