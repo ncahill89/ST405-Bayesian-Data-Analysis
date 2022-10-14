@@ -14,3 +14,5 @@ Includes:
   - 2b. Beta Inference
   
   - 3a&b. Single Parameter Normal
+  
+  - 4a&b. MCMC
