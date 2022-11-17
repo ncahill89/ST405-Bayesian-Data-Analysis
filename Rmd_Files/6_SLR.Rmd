@@ -1,0 +1,620 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Bayesian Linear Regression with JAGS"
+output:
+  output: github_document
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidybayes)
+library(tidyverse)
+library(ggExtra)
+```
+
+
+## Data: Cognitive Test Scores
+\footnotesize
+
+Data are available on the cognitive test scores of three- and four-year-old children in the USA.
+  - The sample contains 434 observations
+  - Information also provided about his/her mother's IQ and whether or not the mother graduated from highschool.
+
+
+```{r,include = FALSE}
+library(rstanarm)
+data(kidiq)
+```
+
+```{r, fig.height=3, fig.width=3}
+p <- ggplot(kidiq, aes(x = mom_iq, y = kid_score, 
+                  colour = as.factor(mom_hs))) +
+  geom_point() +
+  labs(colour = "mom_hs") +
+  theme(legend.position="top")
+
+p_extra <- ggMarginal(p, type = "histogram", margins = "y") 
+p_extra
+```
+
+
+
+## Simple Linear Regression Model
+\footnotesize
+We will assume a normal model for the data such that 
+
+$y_i|\mu,\sigma^2 \sim N(\mu_i, \sigma^2)$
+
+Let's start simple and consider the expected value for $y_i$ as a function of one explanatory variable (mother's IQ) such that
+  
+$\mu_i = \alpha + \beta(x_i - {\text mean}(x_i))$
+
+where the predictor is mean centered. 
+
+This could also be specified as 
+
+$y_i = \alpha + \beta(x_{i} - {\text mean}(x_{i})) + \epsilon_i$
+
+$\epsilon_i \sim N(0, \sigma^2)$
+
+
+## Prior Choice
+
+\footnotesize 
+ 
+We will need to specify priors for $\alpha$, $\beta$ and $\sigma$. 
+
+Before seeing the data would could assume that the value of the intercept ($\alpha$) is unlikely to be to beyond the range of possible IQ values (1, 200). So let’s assume an expected value of 100 and a standard deviation of 30.
+
+$\alpha \sim N(100,30^2)$
+
+For the slope ($\beta$), before seeing the data I have no idea about whether the mother's IQ affects the kid's IQ, so it is reasonable to consider a value of 0 for the slope. Realistically I think we are unlikely to see the value of the slope going anywhere beyond the range (-4,4), so let's assume a standard deviation for the slope of 2.
+
+$\beta \sim N(0,2^2)$
+
+## Prior Choice
+
+\footnotesize 
+
+For $\sigma$ we can consider some uninformative or weakly informative priors commonly used for variance parameters:
+
+  - Gamma prior $gamma(\epsilon, \epsilon)$ on the precision ($\tau = \frac{1}{\sigma^2}$)
+  
+  $\tau \sim Ga(0.1,0.1)$
+
+  - Uniform prior on the standard deviation
+  
+  $\sigma \sim U(0,50)$
+  
+  - Cauchy (half-t) prior on the standard deviation
+  
+  $\sigma \sim ht(30,10^2,1)$
+
+
+## JAGS model specification
+
+\footnotesize
+```{r, echo = TRUE}
+lrmodel1 ="
+model{
+	for (i in 1:n){
+ 		y.i[i] ~ dnorm(mu.i[i], sigma^-2)
+ 		mu.i[i] <- alpha + beta*(x.i[i] - mean(x.i))
+	}
+
+#Priors
+alpha ~ dnorm(80, 30^-2) 
+beta ~ dnorm(0, 2^-2) 
+sigma ~ dt(30,10^-2,1)T(0,) #truncated t-distribution
+}
+"
+```
+
+## Model Fitting
+\footnotesize
+```{r, echo = TRUE, message=FALSE}
+library(rjags)
+library(R2jags)
+
+jags.data <- list(y.i = kidiq$kid_score, 
+                  x.i = kidiq$mom_iq, 
+                  n = nrow(kidiq))
+
+parnames <- c("alpha","beta","sigma","mu.i")
+
+mod1 <- jags(data = jags.data, 
+            parameters.to.save=parnames, 
+            model.file = textConnection(lrmodel1))
+```
+
+## Output - Parameter Uncertainty
+\footnotesize
+```{r, echo = TRUE}
+m1 <- mod1$BUGSoutput$sims.matrix
+
+par_samps <- m1 %>% spread_draws(alpha,beta,sigma) 
+
+par_summary <- m1 %>% 
+                gather_rvars(alpha,beta,sigma) %>% 
+                median_qi(.value)
+par_summary
+```
+
+## Output - Parameter Uncertainty
+\footnotesize
+```{r, message=FALSE}
+library(ggdist)
+
+p1 <- ggplot(par_samps, aes(x = alpha)) +
+  stat_halfeye( aes(fill = stat(cut_cdf_qi(cdf, .width = c(.68, .95, .99)))),
+                    slab_color = "steelblue4") +
+  scale_fill_brewer(direction = -1, na.translate = FALSE) +
+  labs(fill = "Intervals")
+
+p2 <- ggplot(par_samps, aes(x = beta)) +
+  stat_halfeye( aes(fill = stat(cut_cdf_qi(cdf, .width = c(.68, .95, .99)))),
+                    slab_color = "steelblue4") +
+  scale_fill_brewer(direction = -1, na.translate = FALSE) +
+  labs(fill = "Intervals")
+
+p3 <- ggplot(par_samps , aes(x = sigma)) +
+  stat_halfeye( aes(fill = stat(cut_cdf_qi(cdf, .width = c(.68, .95, .99)))),
+                    slab_color = "steelblue4") +
+  scale_fill_brewer(direction = -1, na.translate = FALSE) +
+  labs(fill = "Intervals")
+
+ggpubr::ggarrange(p1,p2,p3,nrow = 1, common.legend = TRUE)
+```
+
+## Output - Parameter Uncertainty
+\footnotesize
+```{r,echo = TRUE, warning=FALSE}
+mu_ind <- 1:nrow(kidiq)
+mu_samps <- m1 %>% spread_draws(mu.i[mu_ind]) 
+mu_summary <- mu_samps %>% 
+                median_qi(.width = 0.95)
+mu_summary[1:5,]
+```
+
+```{r, include=FALSE}
+mu_samps$traj <- rep(1:dim(m1)[1],nrow(kidiq))
+mu_samps$x <- rep(kidiq$mom_iq,each = dim(m1)[1])
+mu_samps <- mu_samps %>% arrange(x) %>% mutate(traj = as.factor(traj))
+```
+
+
+## Posterior Draws of $\mu_i$
+\footnotesize
+For each draw (simulation) $s= 1, \ldots , S$ of the parameters from the posterior distribution we can obtain 
+$\mu_i^{(s)} = \beta_0^{(s)} + \beta_1^{(s)}(x_{i} - {\text mean}(x_i))$
+
+__5 draws__
+
+```{r,fig.width=7,fig.height=4}
+ggplot(kidiq, aes(x = mom_iq, y = kid_score)) +
+  geom_point(alpha = 0.3) +
+  geom_line(data = mu_samps %>% filter(traj == c(1:4)),aes(x = x, y = mu.i, group = traj, colour = "Posterior draws of mu"),alpha = 0.3) +
+  theme_bw() +
+  labs(colour = "") 
+```
+
+## Posterior Draws of $\mu_i$
+\footnotesize
+For each draw (simulation) $s= 1, \ldots , S$ of the parameters from the posterior distribution we can obtain 
+$\mu_i^{(s)} = \beta_0^{(s)} + \beta_1^{(s)}(x_{i} - {\text mean}(x_i))$
+
+__200 draws__
+```{r, fig.width=7,fig.height=4}
+ggplot(kidiq, aes(x = mom_iq, y = kid_score)) +
+  geom_point(alpha = 0.3) +
+  geom_line(data = mu_samps %>% filter(traj == c(1:200)),aes(x = x, y = mu.i, group = traj, colour = "Posterior draws of mu"),alpha = 0.1) +
+  theme_bw() +
+  labs(colour = "")  +
+  ylab("Kid's IQ") +
+  xlab("Mother's IQ")
+
+```
+
+
+## Point Estimate + Credible Interval
+\tiny
+```{r, fig.width=7,fig.height=4}
+kidiq <- kidiq %>% mutate(mu.i = mu_summary$mu.i,
+                          lower = mu_summary$.lower,
+                          upper = mu_summary$.upper)
+
+ggplot(kidiq, aes(x = mom_iq, y = kid_score)) +
+  geom_point() +
+  geom_line(aes(x = mom_iq, y = mu.i),colour = "blue") +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "CI"), alpha = 0.3) +
+  theme_bw() +
+  labs(fill = "") +
+  ylab("Kid's IQ") +
+  xlab("Mother's IQ")
+
+```
+
+
+## Predictive Distribution
+
+\footnotesize
+
+The posterior predictive distribution is the distribution of possible unobserved values conditional on the observed values.
+
+```{r, fig.width=7,fig.height=4}
+## breaks: where you want to compute densities
+breaks <- c(60,80,100,120,140)
+kidiq$group <- cut(kidiq$mom_iq, breaks)
+kidiq$res <- kidiq$kid_score - mod1$BUGSoutput$mean$mu.i
+kidiq$fit <-  mod1$BUGSoutput$mean$mu.i
+kidiq$fit_sd <- mod1$BUGSoutput$sd$mu.i
+
+## Compute densities for each section, and flip the axes, and add means of sections
+## Note: the densities need to be scaled in relation to the section size (2000 here)
+dens <- do.call(rbind, lapply(split(kidiq, kidiq$group), function(x) {
+  ## Get some data for normal lines as well
+  xs <- seq(min(x$res), max(x$res), len=50)
+  res <- data.frame(y = xs + mean(x$fit),
+                               x = min(x$mom_iq) + 700*dnorm(xs, 0, mod1$BUGSoutput$mean$sigma))
+  res
+}))
+dens$group <- rep(levels(kidiq$group), each=50)
+dens <- dens %>% filter(group != "(60,80]")
+
+
+ggplot(kidiq, aes(x = mom_iq, y = kid_score)) +
+  geom_point(alpha = 0.3) +
+  geom_line(data = mu_samps %>% filter(traj == c(1:200)),aes(x = x, y = mu.i, group = traj, colour = "Posterior draws of mu"),alpha = 0.1) +
+  theme_bw() + 
+  #theme(legend.position = "none") +
+  geom_path(data=dens, aes(x, y,group=group, colour = "Predictive distribution \n given posterior mean"), lwd=1.1) +
+  geom_vline(xintercept=breaks[-1], lty=2) +
+  labs(colour = "") +
+  ylab("Kid's IQ") +
+  xlab("Mother's IQ")
+```
+
+## Credible interval vs prediction interval
+
+\footnotesize 
+
+A Bayesian “credible interval”, is an interval associated with the posterior distribution of a parameter, for example, the \underline{expected value} of the Kid's IQ given a mother's IQ of 120 ($\mu$). If I give an 80% interval there should be an 80% chance that the expected value of the Kid IQ lies within the interval. 
+
+A prediction interval is an interval associated with a random variable yet to be observed, for example, an \underline{unobserved} Kid's IQ, given a mother's IQ of 120 ($\tilde{y})$. If I give an 80% interval there should be an 80% chance that the actual Kid IQ lies within the interval. 
+
+```{r,echo = TRUE}
+lrmodel1 ="
+model{
+....
+## predictive distribution
+  mu_pred <- alpha + beta*(120 - mean(x.i))
+ 	ytilde ~ dnorm(mu_pred, sigma^-2)
+}
+"
+```
+
+
+```{r, echo = FALSE, include=FALSE}
+lrmodel1 ="
+model{
+	for (i in 1:n){
+ 		y.i[i] ~ dnorm(mu.i[i], sigma^-2)
+ 		mu.i[i] <- alpha + beta*(x.i[i] - mean(x.i))
+	}
+
+#Priors
+alpha ~ dnorm(80, 30^-2) 
+beta ~ dnorm(0, 2^-2) 
+sigma ~ dt(30,10^-2,1)T(0,) #truncated t-distribution
+
+## predictive distribution
+  mu_pred <- alpha + beta*(120 - mean(x.i))
+ 	ytilde ~ dnorm(mu_pred, sigma^-2)
+}
+"
+```
+
+```{r, message=FALSE, include=FALSE}
+jags.data <- list(y.i = kidiq$kid_score, 
+                  x.i = kidiq$mom_iq, 
+                  n = nrow(kidiq))
+
+parnames <- c("alpha","beta","mu.i","mu_pred","ytilde")
+
+mod1 <- jags(data = jags.data, 
+            parameters.to.save=parnames, 
+            model.file = textConnection(lrmodel1))
+
+```
+
+## Credible interval vs prediction interval
+
+\footnotesize
+
+Let's consider the difference between the credible interval and the prediction interval for the Kid's IQ when the Mother's IQ = 120. 
+
+```{r, echo = TRUE, warning=FALSE}
+m1 <- mod1$BUGSoutput$sims.matrix
+
+par_samps <- m1 %>% spread_draws(mu_pred,ytilde) 
+
+par_summary <- m1 %>% 
+                gather_rvars(mu_pred,ytilde) %>% 
+                median_qi(.value)
+par_summary
+```
+
+What do you notice about the width of the intervals? 
+
+
+## Extending the regression model 
+
+\footnotesize
+
+Suppose now we want to see if there's a "highschool"  effect on the relationship between Mother's IQ and Kid's IQ. 
+
+Some possible choices:
+
+  - Model 2A: Add the highschool variable in as a covariate, this will lead to a varying intercepts model with $\alpha_1$ for highschool = no and $\alpha_2$ for highschool = yes. 
+
+  - Model 2B: Add the highschool variable in as a covariate and as an interaction with Mother's IQ, this will lead to a varying intercepts and slopes model with $\alpha_1$ and $\beta_1$ for highscool = no and  $\alpha_2$ and $\beta_2$ for highscool = yes. 
+
+Let's consider model 2B. The specification of this model could be written as
+
+$y_i|\mu,\sigma^2 \sim N(\mu_i, \sigma^2)$
+
+$\mu_i = \underset{\text{j[i] = HS for obs i}}{\alpha_{j[i]} + \beta_{j[i]}}(x_{i} - {\text mean}(x_i))$
+
+$\alpha_j \sim N(100,30^2), \hspace{0.5em} \text{for } j=1,2$
+
+$\beta_j \sim N(0,2^2), \hspace{0.5em} \text{for } j=1,2$
+
+## JAGS model specification
+
+\tiny
+```{r, echo = TRUE}
+lrmodel2 ="
+model{
+	for (i in 1:n){
+ 		y.i[i] ~ dnorm(mu.i[i], sigma^-2)
+ 		mu.i[i] <- alpha.j[hs_index[i]] + beta.j[hs_index[i]]*(x.i[i] - mean(x.i))
+	}
+
+#Priors
+for(j in 1:m)
+{
+alpha.j[j] ~ dnorm(80, 30^-2) 
+beta.j[j] ~ dnorm(0, 2^-2) 
+}
+sigma ~ dt(30,10^-2,1)T(0,) #truncated t-distribution
+}
+"
+```
+
+```{r, echo = TRUE, message=FALSE}
+jags.data <- list(y.i = kidiq$kid_score, 
+                  x.i = kidiq$mom_iq, 
+                  hs_index = as.numeric(kidiq$mom_hs + 1),
+                  n = nrow(kidiq),
+                  m = 2)
+```
+
+```{r, include = FALSE}
+parnames <- c("alpha.j","beta.j","sigma","mu.i")
+mod2 <- jags(data = jags.data, 
+            parameters.to.save=parnames, 
+            model.file = textConnection(lrmodel2))
+```
+
+## Output
+\footnotesize 
+```{r, echo = TRUE}
+m2 <- mod2$BUGSoutput$sims.matrix
+
+par_samps <- m2 %>% spread_draws(alpha.j[1:2],beta.j[1:2]) 
+
+par_summary <- m2 %>% 
+                gather_rvars(alpha.j[1:2],beta.j[1:2]) %>% 
+                median_qi(.value)
+par_summary
+```
+
+## Visualising the results
+
+```{r, fig.width=7,fig.height=4}
+mu_ind <- 1:nrow(kidiq)
+mu_samps <- m2 %>% spread_draws(mu.i[mu_ind]) 
+mu_summary <- mu_samps %>% 
+                median_qi(.width = 0.95)
+
+kidiq <- kidiq %>% mutate(mu.i = mu_summary$mu.i,
+                          lower = mu_summary$.lower,
+                          upper = mu_summary$.upper,
+                          mom_hs = factor(mom_hs, labels = c("no", "yes")))
+
+ggplot(kidiq, aes(x = mom_iq, y = kid_score, colour = mom_hs)) +
+  geom_point(alpha = 0.3) +
+  geom_line(aes(x = mom_iq, y = mu.i)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  theme_bw() +
+  labs(colour = "Highschool") +
+  ylab("Kid's IQ") +
+  xlab("Mother's IQ")
+
+```
+
+
+## Which model do we choose?
+
+\footnotesize
+Firstly, let's have a look at the residuals for each model
+
+```{r, fig.height=4,fig.width=6}
+mu_ind <- 1:nrow(kidiq)
+
+mu_summary1 <- m1 %>% spread_draws(mu.i[mu_ind]) %>% 
+                median_qi(.width = 0.8)
+
+mu_summary2 <- m2 %>% spread_draws(mu.i[mu_ind]) %>% 
+                median_qi(.width = 0.8)
+
+
+kidiq <- kidiq %>% mutate(mu1 = mu_summary1$mu.i,
+                          mu2 = mu_summary2$mu.i,) 
+
+p1 <- ggplot(kidiq, aes(x = mu1, y = kid_score - mu1)) +
+  geom_point()
+
+p2 <- ggplot(kidiq, aes(x = mu2, y = kid_score - mu2)) +
+  geom_point()
+
+ggpubr::ggarrange(p1,p2)
+```
+
+
+## Which model do we choose?
+\footnotesize
+Let's also consider the observed values vs the model-based estimates.
+
+```{r,fig.height=4,fig.width=6}
+
+p1 <- ggplot(kidiq, aes(x = kid_score, y = mu1)) +
+  geom_point() +
+  geom_line(aes(x = kid_score, y = kid_score))
+
+p2 <- ggplot(kidiq, aes(x = kid_score, y = mu2)) +
+  geom_point() +
+  geom_line(aes(x = kid_score, y = kid_score))
+
+ggpubr::ggarrange(p1,p2)
+
+```
+
+## Model information criteria
+\footnotesize
+You might have come across these before: Akaike Information Criterion (AIC),
+Bayesian Information Criterion (BIC)
+
+  - The general idea is that the score on the likelihood is a good measure of model fit,
+except for the fact that more complex models will generally have higher likelihood
+scores
+
+  - If we penalise these scores by some measure of the complexity of the model then we
+can compare models across complexities
+
+  - The usual measure of complexity is some function of the number of parameters
+  
+  - Because these are relative model comparisons, the best model according to an IC
+might still be useless.
+
+## Model information criteria
+\footnotesize
+To calculate an IC, the likelihood score gets transformed into the deviance (remember JAGS monitors the "deviance" parameter), which is minus twice the log-likelihood score and then add a model complexity term is added.
+
+  - The two most common ICs are:
+
+AIC : -2 log $\hat{L}$ + 2p
+
+BIC : -2 log $\hat{L}$ + p log(n)
+
+where p is the number of parameters and n is the number of observations
+
+  - Smaller values indicate the preferred model.
+
+## Model information criteria
+\footnotesize
+For Bayesian models it’s hard to know which value of L to use, seeing as at each
+iteration we get a different likelihood score. Two specific versions of IC have been developed.
+
+  - The first, called the Deviance Information Criteria (DIC) is calculated via:
+  
+DIC: -2 log $p(y|\hat{\theta}) + 2 p_D$
+
+where $p_D$ = 2(log $p(y|\hat{\theta})$ $- E_{post}$log $p(y|\theta))$ is the effective number of parameters 
+
+  - The second called the Widely Applicable Information Criterion (WAIC) which is calculated as:
+
+WAIC: -2 log $p(y|\hat{\theta}) + p_{WAIC}$
+
+Here $p_{WAIC}$ is a measure of the variability of the likelihood scores
+
+## Which IC to use?
+
+\footnotesize
+
+  - WAIC and DIC are built for Bayesian hierarchical models
+
+  - DIC is included by default in the R2jags package
+  
+  - WAIC is included in the loo package which is installed alongside Stan
+  
+  - WAIC is considered superior as it also provides uncertainties on the values. Most of
+the others just give a single value
+
+## Obtaining DIC and WAIC from JAGS
+
+\footnotesize 
+
+  - DIC is easy to obtain from JAGS
+  
+```{r, echo = TRUE}
+DIC.m1 = mod1$BUGSoutput$DIC
+DIC.m1
+
+DIC.m2 = mod2$BUGSoutput$DIC
+DIC.m2
+```
+  
+  - WAIC takes a little bit more work but there's some code [here](https://gist.github.com/oliviergimenez/68ad17910a62635ff6a062f8ec34292f#file-compute-waic-in-jags-r) that illustrates how to do it. 
+  
+  
+```{r}
+samples.m1 <- jags.samples(mod1$model, 
+                           c("WAIC","deviance"), 
+                           type = "mean", 
+                           n.iter = 5000,
+                           n.burnin = 1000,
+                           n.thin = 1)
+samples.m1$p_waic <- samples.m1$WAIC
+samples.m1$waic <- samples.m1$deviance + samples.m1$p_waic
+tmp <- sapply(samples.m1, sum)
+waic.m1 <- round(c(waic = tmp[["waic"]], p_waic = tmp[["p_waic"]]),1)
+waic.m1
+
+samples.m2 <- jags.samples(mod2$model, 
+                           c("WAIC","deviance"), 
+                           type = "mean", 
+                           n.iter = 5000,
+                           n.burnin = 1000,
+                           n.thin = 1)
+samples.m2$p_waic <- samples.m2$WAIC
+samples.m2$waic <- samples.m2$deviance + samples.m2$p_waic
+tmp <- sapply(samples.m2, sum)
+waic.m2 <- round(c(waic = tmp[["waic"]], p_waic = tmp[["p_waic"]]),1)
+waic.m2
+
+```
+
+
+## Cross Validation
+
+\footnotesize
+
+Cross validation (CV) works by:
+
+1. Removing part of the data
+
+2. Fitting the model to the remaining part
+
+3. Predicting the values of the removed part
+
+4. Comparing the predictions with the true (left-out) values
+
+It’s often fitted repeatedly
+
+  - as in k-fold CV where the data are divided up into k groups, and each group is left out in turn.
+
+  - In smaller data sets, people perform leave-one-out cross-validation (LOO-CV)
+
