@@ -3,8 +3,7 @@ title: "Bayesian Analysis"
 author: "Dr Niamh Cahill (she/her)"
 date: "Markov Chain Monte Carlo (MCMC) Diagnostics"
 output:
-  slidy_presentation: default
-  beamer_presentation: default
+  output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -247,3 +246,5 @@ Let's look at a demo of some of the diagnostics we've been discussing.
 ```{r, echo = TRUE, eval = FALSE}
 shinystan::launch_shinystan_demo()
 ```
+
+
