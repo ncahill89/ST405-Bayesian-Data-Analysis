@@ -3,8 +3,7 @@ title: "Bayesian Data Analysis"
 author: "Dr Niamh Cahill (she/her)"
 date: "Just Another Gibbs Sampler (JAGS)"
 output:
-  beamer_presentation: default
-  slidy_presentation: default
+  output: github_document
 ---
 
 ```{r setup, include=FALSE}
