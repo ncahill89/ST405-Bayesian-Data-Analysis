@@ -1,7 +1,6 @@
-Bayesian Data Analysis
+Bayesian Data Analysis - Just Another Gibbs Sampler (JAGS)
 ================
 Dr Niamh Cahill (she/her)
-Just Another Gibbs Sampler (JAGS)
 
 ## JAGS
 
