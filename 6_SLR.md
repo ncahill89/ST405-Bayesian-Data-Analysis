@@ -1,5 +1,4 @@
 Bayesian Data Analysis - Bayesian Linear Regression with JAGS
-
 ================
 Dr Niamh Cahill (she/her)
 
