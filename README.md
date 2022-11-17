@@ -5,22 +5,22 @@ Includes:
 
   - Module Information
 
-  - 1a. Bayes' Rule
+  - 1a Bayes' Rule
 
-  - 1b. Happiness Example
+  - 1b Happiness Example
   
-  - 2a. Beta Priors
+  - 2a Beta Priors
   
-  - 2b. Beta Inference
+  - 2b Beta Inference
   
-  - 3a&b. Single Parameter Normal
+  - 3 Single Parameter Normal
   
-  - 4a&b. MCMC
+  - 4 MCMC
   
-  - 5. JAGS
+  - 5 JAGS
   
-  - 6. Linear Regression with JAGS
+- 6 Linear Regression with JAGS
   
-  - 7. Posterior Predicitve Checks
+- 7 Posterior Predictive Checks
   
-  - 8. Bayesian Hierarcical Models (1)
+- 8 Bayesian Hierarchical Models (1)
