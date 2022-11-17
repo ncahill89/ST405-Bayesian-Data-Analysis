@@ -1,7 +1,7 @@
-Bayesian Analysis
+Bayesian Analysis - Markov Chain Monte Carlo (MCMC) Diagnostics
 ================
 Dr Niamh Cahill (she/her)
-Markov Chain Monte Carlo (MCMC) Diagnostics
+
 
 ## MCMC Reprentativeness, Accuracy and Efficiency
 

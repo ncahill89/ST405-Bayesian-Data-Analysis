@@ -1,7 +1,7 @@
-Bayesian Analysis
+Bayesian Analysis - Markov Chain Monte Carlo (MCMC) Sampling
 ================
 Dr Niamh Cahill (she/her)
-Markov Chain Monte Carlo (MCMC) Sampling
+
 
 ## Markov Chain Monte Carlo (MCMC)
 
