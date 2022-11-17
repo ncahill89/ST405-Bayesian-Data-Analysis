@@ -1,7 +1,7 @@
-Bayesian Data Analysis
+Bayesian Data Analysis - Bayesian Linear Regression with JAGS
+
 ================
 Dr Niamh Cahill (she/her)
-Bayesian Linear Regression with JAGS
 
 ## Data: Cognitive Test Scores
 
