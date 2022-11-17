@@ -16,3 +16,11 @@ Includes:
   - 3a&b. Single Parameter Normal
   
   - 4a&b. MCMC
+  
+  - 5. JAGS
+  
+  - 6. Linear Regression with JAGS
+  
+  - 7. Posterior Predicitve Checks
+  
+  - 8. Bayesian Hierarcical Models (1)
