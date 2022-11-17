@@ -242,7 +242,7 @@ We can then use the PPC functions from the `bayesplot` package by providing repl
 ppc_hist(y, yrep_prior[1:5, ])
 ```
 
-## Prior vs Posterior for parameters ($\alpha_j$)
+## Prior vs Posterior for parameters 
 
 ```{r, echo = FALSE, message = FALSE, warning=FALSE}
 m1 <- mod$BUGSoutput$sims.matrix
@@ -263,7 +263,7 @@ ggplot(par_dat) +
 
 ```
 
-## Prior vs Posterior for parameters ($\beta_j$)
+## Prior vs Posterior for parameters 
 
 ```{r, echo = FALSE, message = FALSE, warning=FALSE}
 par_dat <- tibble(prior_beta = rnorm(1000,0,2),

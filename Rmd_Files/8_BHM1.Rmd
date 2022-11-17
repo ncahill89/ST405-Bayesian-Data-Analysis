@@ -1,0 +1,924 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Bayesian Hierarchical Models"
+output:
+  output: github_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(DiagrammeR)
+library(tidyverse)
+library(rjags)
+library(R2jags)
+library(tidybayes)
+
+```
+
+## Hierarchical Binomial Model 
+
+\footnotesize
+
+Suppose we are considering the success of a treatment for cardio vascular disease (CVD) in a number of different hospitals. We are interested in $\theta_j$ the survival probability associated with hospital $j$. 
+
+We have observations $y_{ij}$ which tells us the status of patient $i$ in hospital $j$ such that $y_{ij} = 1$ if the patient survived and $y_{ij} = 0$ otherwise. 
+
+We could assume that $\theta_j$ are independent
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [overlap = true, fontsize = 10]
+
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5,
+        fontname = Helvetica]
+  y1[label = <y<sub>i1</sub>>]; y2[label = <y<sub>i2</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta1[label = <&theta;<sub>1</sub>>] theta2[label = <&theta;<sub>2</sub>>] 
+
+  node [shape = plaintext,
+        fontname = Helvetica]
+  dot1[label = <...>]
+  
+   
+  node [shape = box,
+        width = 0.5,
+        fontname = Helvetica]
+  y3[label = <y<sub>im</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta3[label = <&theta;<sub>m</sub>>]
+
+
+  # several 'edge' statements
+  theta1->y1 theta2->y2 dot1  theta3->y3 
+}
+",
+width = 200, height = 100)
+
+```
+
+## Hierarchical Binomial Model
+\footnotesize
+We could assume that there's a joint effect i.e., a common $\theta$
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [overlap = true, fontsize = 10]
+
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5,
+        fontname = Helvetica]
+  y1[label = <y<sub>i1</sub>>]; y2[label = <y<sub>i2</sub>>]
+
+
+  node [shape = plaintext,
+        fontname = Helvetica]
+  dot1[label = <...>]
+   
+  node [shape = box,
+        width = 0.5,
+        fontname = Helvetica]
+  y3[label = <y<sub>i3</sub>>]
+
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  tau[label = <&theta;>]
+
+  # several 'edge' statements
+  tau->y1 tau->y2 tau -> dot1 tau->y3 
+}
+",
+width = 200, height = 100)
+
+```
+
+## Hierarchical Binomial Model
+
+\footnotesize
+
+But maybe it's more sensible to assume that we have different $\theta_j$ but that they are similar
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [overlap = true, fontsize = 10]
+
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5,
+        fontname = Helvetica]
+  y1[label = <y<sub>i1</sub>>]; y2[label = <y<sub>i2</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta1[label = <&theta;<sub>1</sub>>] theta2[label = <&theta;<sub>2</sub>>] 
+
+  node [shape = plaintext,
+        fontname = Helvetica]
+  dot1[label = <...>]
+   
+  node [shape = box,
+        width = 0.5,
+        fontname = Helvetica]
+  y3[label = <y<sub>i3</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta3[label = <&theta;<sub>3</sub>>]
+
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  tau[label = <&tau;>]
+
+  # several 'edge' statements
+  theta1->y1 theta2->y2 dot1 theta3->y3 
+  tau->theta1 tau->theta2 tau -> dot1 tau->theta3 
+}
+",
+width = 150, height = 150)
+
+```
+
+A natural assumption to make is that $\theta_j$ have a common population distribution
+
+Now we are building up levels. We have a data level, a parameter level and a hyperparameter level
+
+
+## Hierarchical Models - Terms
+
+\footnotesize
+
+__The data level:__ observations given parameters $p(y_{ij}|\theta_j)$
+
+__The parameter level:__ parameters given hyperparameters $p(\theta_j|\tau)$
+
+__The hyperparameter level:__ $p(\tau)$
+
+Putting all of this together in Bayes' theorem we get:
+
+$p(\theta, \tau|y) \propto p(y|\theta)p(\theta|\tau)p(\tau)$
+
+## Hierarchical Models - Rats example
+
+\footnotesize
+In the evaluation of drugs for possible clinical application, studies are routinely performed on rodents. 
+
+Suppose we have studies to estimate $\theta$, the probability of a tumor in a population of female laboratory rats of type ‘F344’ that receive a zero dose of the drug (a control group).
+
+The data are whether the rat developed endometrial stromal polyps (a kind of tumor)
+
+The experiment has been repeated 71 times
+
+```{r}
+y <- c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+       1,1,1,1,1,1,1,1,2,2,2,2,2,2,
+       2,2,2,1,5,2,5,3,2,7,7,3,3,2,
+       9,10,4,4,4,4,4,4,4,10,4,4,4,
+       5,11,12,5,5,6,5,6,6,6,6,16,
+       15,15,9,4)
+
+n <- c(20,20,20,20,20,20,20,19,19,19,
+       19,18,18,17,20,20,20,20,19,19,
+       18,18,25,24,23,20,20,20,20,20,
+       20,10,49,19,46,27,17,49,47,20,
+       20,13,48,50,20,20,20,20,20,20,
+       20,48,19,19,19,22,46,49,20,20,
+       23,19,22,20,20,20,52,46,47,24,14)
+
+paste0(y,"/",n)
+```
+
+<!-- For a particular study drawn from the statistical literature, suppose the immediate aim is to estimate $\theta$, the probability of tumor in a population of female laboratory rats of type ‘F344’ that receive a zero dose of the drug (a control group). The data show that 4 out of 14 rats developed endometrial stromal polyps (a kind of tumor). It is natural to assume a binomial model for the number of tumors, given $\theta$. For convenience, we select a prior distribution for θ from the conjugate family, θ ∼ Beta(α, β). -->
+
+## Hierarchical Models - Rats example
+
+\footnotesize
+Let's specify a Bayesian Hierarchical model for the rats example. Let $y_j$ be the number of rats that had tumors in study $j$ and let $n_j$ be the total number of rats in study $j$. It is natural to assume a binomial model for the number of tumors, given $\theta_j$ and we can select a prior distribution for $\theta_j$ from the conjugate family and vague priors for the hyperparameters. 
+
+$y_j|\theta_j \sim Binomial(\theta_j,n_j)$
+
+$\theta_j|\alpha,\beta \sim Be(\alpha, \beta)$
+
+$\alpha \sim ht(1,10^2,1)$
+$\beta \sim ht(1,10^2,1)$
+
+
+```{r,fig.width=4,fig.height=4}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [compound = true, fontsize = 10]
+
+  subgraph cluster0 {
+  
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5]
+  y[label = <y<sub>j</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta[label = <&theta;<sub>j</sub>>] 
+
+  node [shape = box,
+        width = 0.5,
+        peripheries = 1,
+        fontname = Helvetica]
+  n[label = <n<sub>j</sub>>]
+  
+  node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  j[label = j]
+
+
+  theta->y n->y j
+  
+
+}
+
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau1[label = <&alpha;>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau2[label = <&beta;>]
+
+
+tau1->theta tau2->theta
+}
+",
+width = 100, height = 100)
+```
+
+## Hierarchical Models - Rats example
+
+```{r,message=FALSE, warning=FALSE, include=FALSE}
+rats <- read_csv("rats.csv")
+
+simple = "model{
+
+for(j in 1:M)
+{
+y_j[j] ~ dbinom(theta_j[j],N_j[j])
+
+theta_j[j] ~ dbeta(1,1)
+}
+}
+"
+
+pooled = "model{
+
+for(j in 1:M)
+{
+y_j[j] ~ dbinom(theta,N_j[j])
+
+}
+
+theta ~ dbeta(1,1)
+}
+"
+
+
+bhm = "model{
+
+for(j in 1:M)
+{
+y_j[j] ~ dbinom(theta_j[j],N_j[j])
+theta_j[j] ~ dbeta(alpha,beta)
+}
+
+# hyperparameter priors
+alpha ~ dt(1,10^-2,1)T(0,)
+beta ~ dt(1,10^-2,1)T(0,)
+}
+"
+
+jags_data <- list(M = nrow(rats),
+                  y_j = rats$y,
+                  N_j = rats$N)
+
+parnames1 <- c("theta_j")
+parnames2 <- c("theta")
+parnames3 <- c("theta_j", "alpha","beta")
+
+mod1 <- jags(data = jags_data, 
+            parameters.to.save=parnames1, 
+            model.file = textConnection(simple))
+
+m1 <- mod1$BUGSoutput$sims.matrix
+theta_ind <- factor(1:nrow(rats)) 
+theta_dat1 <- m1 %>% spread_draws(theta_j[theta_ind]) %>% 
+  dplyr::select(theta_ind, theta_j) %>% dplyr::ungroup() %>% 
+  dplyr::mutate(theta_ind = as.factor(theta_ind))
+
+p1 <- ggplot(theta_dat1, aes(x = theta_j, colour = theta_ind)) +
+  geom_density() +
+  theme_bw() +
+  theme(legend.position = "none")+
+  xlim(c(0,1)) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  ggtitle("Separate Model")
+
+mod2 <- jags(data = jags_data, 
+            parameters.to.save=parnames2, 
+            model.file = textConnection(pooled))
+
+m2 <- mod2$BUGSoutput$sims.matrix
+theta_dat2 <- m2 %>% spread_draws(theta) 
+
+p2 <- ggplot(theta_dat2, aes(x = theta)) +
+  geom_density() +
+  theme_bw() + 
+  theme(legend.position = "none")+
+  xlim(c(0,1)) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  ggtitle("Pooled Model")
+
+
+mod3 <- jags(data = jags_data, 
+            parameters.to.save=parnames3, 
+            model.file = textConnection(bhm))
+
+m3 <- mod3$BUGSoutput$sims.matrix
+theta_ind <- factor(1:nrow(rats)) 
+theta_dat3 <- m3 %>% spread_draws(theta_j[theta_ind]) %>% 
+  dplyr::select(theta_ind, theta_j) %>% dplyr::ungroup() %>% 
+  dplyr::mutate(theta_ind = as.factor(theta_ind))
+
+p3 <- ggplot(theta_dat3, aes(x = theta_j, colour = theta_ind)) +
+  geom_density() +
+  theme_bw() + 
+  theme(legend.position = "none") +
+  xlim(c(0,1)) +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  ggtitle("Hierarchical Model")
+
+
+
+par_dat <- m3 %>% spread_draws(alpha, beta)
+
+theta_grid <- seq(0,1,0.01)
+n_samps <- 20
+beta_pdf <- matrix(NA,nrow = length(theta_grid),n_samps)
+for(s in 1:n_samps)
+{
+beta_pdf[,s] <- dbeta(theta_grid,par_dat$alpha[s],par_dat$beta[s])
+}
+beta_pdf <- data.frame(beta_pdf)
+colnames(beta_pdf) <- 1:n_samps
+beta_pdf$theta_grid <- theta_grid
+
+beta_pdf_long <- tibble(beta_pdf) %>% pivot_longer(-theta_grid, 
+                                           names_to = "sample", 
+                                           values_to = "density")
+
+p4 <- ggplot(beta_pdf_long, aes(x = theta_grid, y = density,group = sample)) +
+  geom_line() +
+  xlab("theta") +
+  theme_bw() +
+  ggtitle("Population (Beta) Prior")
+
+
+# p4 <- ggplot(par_dat, aes(x = pop_prior)) +
+#       geom_density() +
+#       theme_bw() + 
+#       xlab(expression(theta)) + 
+#       xlim(c(0,1)) +
+#       theme(axis.title.y = element_blank(),
+#         axis.text.y = element_blank(),
+#         axis.ticks.y = element_blank()) +
+#   ggtitle("Population Distribution (Beta) Prior")
+# 
+  
+ggpubr::ggarrange(p1,p2,ncol = 1)
+
+```
+
+
+
+```{r}
+ggpubr::ggarrange(p1,p2,ncol = 1)
+```
+
+
+## Hierarchical Models - Rats example
+```{r}
+ggpubr::ggarrange(p1,p3,ncol = 1)
+```
+
+## Hierarchical Models - Rats example
+
+\footnotesize
+Summary of hyperparameters $\alpha$ and $\beta$ from the population Beta prior distribution 
+
+```{r}
+
+par_summary <- m3 %>% 
+                gather_rvars(alpha,beta) %>% 
+                median_qi(.value)
+
+
+knitr::kable(par_summary)
+```
+
+$Beta(\alpha, \beta)$ given posterior draws of $\alpha$ and $\beta$
+
+```{r,fig.width=4, fig.height=2}
+p4
+```
+
+## Hierarchical Normal Model 
+\footnotesize
+Assume a factory has 6 machines and a quality measure that is taken on a regular basis. 
+
+How might we structure a hierarchical model such that we get an overall estimate of quality across all machines as well as a quality estimate per machine? 
+  
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [compound = true, fontsize = 10]
+
+  subgraph cluster0 {
+  
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5]
+  y[label = <y<sub>ij</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta[label = <&mu;<sub>j</sub>>] 
+
+
+  node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  j[label = j]
+
+
+  theta->y j
+  
+
+}
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5]
+  sigma[label = <&sigma;>]
+
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau1[label = <&mu;<sub>F</sub>>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau2[label = <&sigma;<sub>F</sub>>]
+
+
+sigma->y tau1->theta tau2->theta 
+}
+",
+width = 200, height = 100)
+```
+
+$y_{ij} \sim N(\mu_j,\sigma^2)$
+
+$\mu_j \sim N(\mu_F, \sigma_F^2)$
+
+$\mu_F \sim N(0,1)$
+
+$\sigma_F \sim ht(0,1,1)$
+
+## Hierarchical Normal Model 
+
+\footnotesize
+
+You might also consider that the variation in quality measures is not constant across all machines. 
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [compound = true, fontsize = 10]
+
+  subgraph cluster0 {
+  
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5]
+  y[label = <y<sub>ij</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  theta[label = <&mu;<sub>j</sub>>] 
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5]
+  sigma[label = <&sigma;<sub>j</sub>>]
+
+
+  node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  j[label = j]
+
+
+  theta->y sigma->y j
+  
+
+}
+
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau1[label = <&mu;<sub>F</sub>>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau2[label = <&sigma;<sub>F</sub>>]
+
+
+ tau1->theta tau2->theta 
+}
+",
+width = 150, height = 150)
+```
+
+## Hierarchical normal model: 8 schools
+
+\footnotesize
+
+  - A study was performed for the Educational Testing Service to analyze the effects of special coaching programs on test scores
+  
+  - Separate randomized experiments were performed to estimate the effects of coaching programs for the SAT (Scholastic Aptitude Test) in each of eight high schools.
+  
+  - The outcome variable in each study was the score on the SAT
+
+  - Typically the scores can vary between 200 and 800, with a mean = 500 and standard deviation = 100. 
+  
+  - The SAT examinations are designed to be resistant to short-term efforts directed specifically toward improving performance on the test; instead they are designed to reflect knowledge acquired and abilities developed over many years of education.
+  
+  - Nevertheless, each of the eight schools in this study considered its short-term coaching program to be successful at increasing SAT scores. 
+  
+## Hierarchical normal model: 8 schools
+
+\footnotesize 
+
+  - The performance gains of coached students were compared to non-coached students. Separate estimates were obtained for each school, but because the size of the schools differed, the standard errors differed as well.
+  
+  - In each school the estimated coaching effect and its standard error were obtained.
+  
+```{r}
+library(Rgbp)
+data(schools)
+schools
+```
+
+## Hierarchical normal model: 8 schools
+\footnotesize
+  - Upon initial examination of the data it may seem that some coaching programs have moderate effects (in the range 18–28 points), most have small effects (0–12 points), and two have small negative effects. 
+  
+  - However, when we take note of the standard errors of these estimated effects, we see that it is difficult statistically to distinguish between any of the experiments.
+  
+  - Let's assume however that we treat every experiment separately
+  
+```{r, echo = FALSE, include=FALSE}
+normalmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma.i[i]^-2) # data model
+ mu.i[i] ~ dnorm(0,0.00001)  # prior for effect
+} # end i loop
+ }
+ "
+
+jags.data <- list(y.i = schools$y, 
+                  sigma.i = schools$se,
+                  N = nrow(schools))
+  
+parnames <- c("mu.i")
+  
+mod <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(normalmodel))
+
+m1 <- mod$BUGSoutput$sims.matrix
+
+school <- 1:8
+sep_mu_samps <- m1 %>% spread_draws(mu.i[school]) 
+
+p <-   ggplot(sep_mu_samps,aes(x = mu.i, y = factor(school,labels = letters[1:8]))) +
+  stat_halfeye() +
+  ylab("")
+
+```
+
+## Hierarchical normal model: 8 schools
+
+\footnotesize
+
+```{r, echo = FALSE, fig.height= 3.5, fig.width=3}
+p
+```
+
+## Hierarchical normal model: 8 schools
+
+\footnotesize
+
+The general overlap in the posterior intervals based on independent analyses suggests that all experiments might be estimating the same quantity. 
+
+  - Is the effect actually the same everywhere i.e., is there one common coaching effect?
+  
+  - Under the hypothesis that all experiments have the same effect and produce independent estimates
+of this common effect, we could treat the data as eight normally distributed observation with an overall mean and known variances.
+  
+  - But, would it be possible to have an effect of 28 in one school just by chance if the coaching effect across all schools is the same? 
+  
+```{r, echo = FALSE, include=FALSE}
+normalmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu,sigma.i[i]^-2) # data model
+} # end i loop
+ mu ~ dnorm(0,0.00001)  # prior for effect
+ }
+ "
+
+jags.data <- list(y.i = schools$y, 
+                  sigma.i = schools$se,
+                  N = nrow(schools))
+  
+parnames <- c("mu")
+  
+mod <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(normalmodel))
+
+m1 <- mod$BUGSoutput$sims.matrix
+
+mu_samps <- m1 %>% spread_draws(mu) 
+
+ggplot(mu_samps,aes(x = mu)) +
+  stat_halfeye()
+
+
+```
+  
+## Issues with spearate and pooled effects
+\footnotesize
+
+Let's consider schools A, with the separate effects model we infer that for school A there is a 50% chance that the true effect is greater than 28. 
+
+```{r, echo = FALSE, fig.height= 2.5, fig.width=2.5}
+A_mu_samps <- sep_mu_samps %>% filter(school == 1)
+ggplot(A_mu_samps,aes(x = mu.i)) +
+  stat_halfeye()
+
+#sum(A_mu_samps$mu.i>28)/nrow(A_mu_samps)
+```
+
+
+## Issues with spearate and pooled effects
+\footnotesize
+With the pooled effects model, we infer that there is a 50% chance that the true effect is less than 7.5. 
+
+```{r, echo = FALSE, fig.height= 2.5, fig.width=2.5}
+ggplot(mu_samps,aes(x = mu)) +
+  stat_halfeye()
+
+#sum(mu_samps$mu>7.5)/nrow(mu_samps)
+```
+
+## Issues with spearate and pooled effects
+\footnotesize
+
+The separate effects model treats School A completely in isolation, ignoring the fact that we have considerable evidence that courses similar to the one taught in School A evidently have typical effect size less than 20 points. 
+
+The pooled effects model would assume that the true effect in all schools is exactly equal, in spite of the courses being taught by different teachers to different students. 
+
+What about a middle path? 
+
+## Hierarchical Normal Model - 8 Schools 
+\footnotesize
+
+1. Assume that each school’s “true effect” is drawn from a normal distribution with unknown mean and standard deviation
+
+2. Assume  the observed effect in each school is sampled from a normal distribution with a mean equal to the true effect, and standard deviation given in the dataset.  
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [compound = true, fontsize = 10]
+
+  subgraph cluster0 {
+  
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5]
+  y[label = <y<sub>i</sub>>]
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  mu[label = <&mu;<sub>i</sub>>] 
+
+  node [shape = box,
+        fixedsize = true,
+        width = 0.5]
+  sigma[label = <&sigma;<sub>i</sub>>]
+
+
+  node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  i[label = i]
+
+
+  mu->y sigma->y i
+  
+
+}
+
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau1[label = <&mu;<sub>P</sub>>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  tau2[label = <&sigma;<sub>P</sub>>]
+
+
+ tau1->mu tau2->mu
+}
+",
+width = 100, height = 100)
+```
+
+$y_{i} \sim N(\mu_i,\sigma_i^2)$
+
+$\mu_i \sim N(\mu_P, \sigma_P^2)$
+
+$\mu_P \sim N(0,200^2)$
+
+$\sigma_P \sim Uniform(0,200)$
+
+
+## Hierarchical Normal Model - 8 Schools 
+
+
+```{r,include=FALSE}
+normalmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma.i[i]^-2) # data model
+ mu.i[i] ~ dnorm(mu_p,sigma_p^-2)  # prior for effect
+} # end i loop
+
+mu_p ~ dnorm(0, 2.5e-05)
+sigma_p ~ dunif(0,200)
+ }
+ "
+
+jags.data <- list(y.i = schools$y, 
+                  sigma.i = schools$se,
+                  N = nrow(schools))
+  
+parnames <- c("mu.i","mu_p","sigma_p")
+  
+mod <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(normalmodel))
+
+m1 <- mod$BUGSoutput$sims.matrix
+```
+
+__Posterior distribution for the effects__
+
+```{r,fig.height= 3, fig.width=2.5}
+school <- 1:8
+sep_mu_samps <- m1 %>% spread_draws(mu.i[school]) 
+
+p <-   ggplot(sep_mu_samps,aes(x = mu.i, y = factor(school,labels = letters[1:8]))) +
+  stat_halfeye() +
+  ylab("")
+p
+```
+
+## Hierarchical Normal Model - 8 Schools 
+
+\footnotesize 
+
+__Effect summaries__
+
+```{r}
+
+par_summary <- m1 %>% 
+                gather_rvars(mu.i[school]) %>% 
+                median_qi(.value)
+par_summary
+```
+
+## What about $\sigma_p$?
+
+\footnotesize
+
+__Posterior distribution of $\sigma_p$__
+
+```{r,fig.height= 3, fig.width=3}
+par_samps <- m1 %>% spread_draws(mu.i[school],sigma_p) 
+
+ggplot(par_samps, aes(x = sigma_p)) +
+  geom_histogram(bins = 40) +
+  theme_bw()
+
+```
+
+## What about $\sigma_p$?
+
+\footnotesize
+
+__What happens to $\mu_i$ as $\sigma_p$ changes?__
+
+```{r, fig.height= 3, fig.width=5}
+
+ggplot(par_samps, aes(x = sigma_p, y = mu.i, colour = factor(school,labels = letters[1:8]))) +
+  #geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2),se = FALSE) +
+  labs(colour = "School")
+```
