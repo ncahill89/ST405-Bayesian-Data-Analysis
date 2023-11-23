@@ -1,0 +1,807 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Hierarchical Regression Models"
+output:
+  output: github_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(DiagrammeR)
+library(tidyverse)
+library(rjags)
+library(R2jags)
+library(tidybayes)
+library(bayesplot)
+
+school_performance_dat <- read_csv("school_performance_dat.csv")
+
+```
+
+## Hierarchical Linear Models 
+
+\footnotesize
+
+Hierarchical regression models are useful as soon as there are predictors at different levels of variation. For example,  
+
+  - Studying scholastic achievement we may have information about individual students (for example, family background), class-level information (char- acteristics of the teacher), and also information about the school (educational policy, type of neighborhood). 
+  
+- Analysis of data obtained by stratified or cluster sampling using regression models for strata or clusters. 
+
+## Hierarchical Linear Models 
+
+\footnotesize
+
+Predictors can be introduced for each of the higher-level units in the data e.g., for the classes in the educational example or for the strata or clusters in the sampling example. 
+
+  - But this will in general dramatically increase the number of parameters in the model, 
+  
+  - and sensible estimation of these is only possible through further modeling, in the form of a population distribution. 
+  
+  - this can take a simple exchangeable or independent and identically distributed form, but it may also be reasonable to consider a further regression model at this second level, to allow for the predictors defined at this level. 
+  
+In principle there is no limit to the number of levels of variation that can be handled in this way and Bayesian methods provide ready guidance on handling the estimation of unknown parameters.
+
+
+## Math Scores Data
+
+\footnotesize
+
+Suppose that we have some data on the math scores for students in 10 different schools. 
+
+  - Each school contributes a number of data points. 
+  
+  - We also have predictors on number of completed homeworks and type of school (public, private)
+
+  - School-specific regression lines can describe the relationship between math scores and homework completed at the school level. 
+
+  - If there is a lack of data for some schools then parameter estimates can be informed by all other schools.
+  
+  - We can consider the school type as a predictor for the school level parameters.
+
+  - We can get an overall estimate of the relationship between math scores and no. of homeworks completed. 
+
+
+## Visualising the Data
+
+```{r}
+#  school_performance <- read_csv("school_performance.csv")
+# 
+# library(purrr)
+# library(tidyr)
+# set.seed(4561)
+# 
+# (nested_school <- school_performance %>%
+#     select(schid, math, homework,public) %>%
+#     group_by(schid) %>%   # prep for work by Species
+#     nest() %>%              # --> one row per Species
+#     ungroup() %>%
+#     mutate(n = c(23,20,2,20,20,20,50,1,20,20))) # add sample sizes
+# 
+# (sampled_schools <- nested_school %>%
+#   mutate(samp = map2(data, n, sample_n)))
+# 
+# school_performance_dat <- sampled_schools %>%
+#   select(-data) %>%
+#   unnest(samp)
+# 
+# 
+# school_performance_dat <- school_performance_dat %>% mutate(schid = factor(schid, labels = 1:10))
+# write_csv(school_performance_dat,"school_performance_dat.csv")
+# 
+```
+
+
+```{r}
+ggplot(school_performance_dat, aes(x = homework, y = math, colour = factor(public))) +
+  geom_point() +
+  facet_wrap(~schid)
+```
+
+## Hierarcical Regression on Individuals within Groups
+
+\footnotesize
+
+__Goal:__ Model math scores with a linear regression and share information across schools to provide information where data are sparse. Include relevant predictors at the different levels in the hierarchy. 
+
+__Modelling Option__
+
+$y_{i} \sim N(\mu_i,\sigma^2)$
+
+$\mu_i  = \alpha_{j[i]} + \beta x_i$  for $i = 1 \ldots n$
+
+$\alpha_j \sim N(\mu_{\alpha},\sigma^2_{\alpha})$ for $j = 1 \ldots m$
+
+where $x_i$ is the number of homeworks completed.
+
+$\beta \sim Normal(0,10^2)$
+
+$\sigma \sim Uniform(0,30)$
+
+## Including Predictors at the Group Level
+
+\footnotesize
+
+Additionally, type of school is potentially informative for across-school variation in average math scores and in this case we can further extend the model such that
+  
+$\alpha_j \sim N(\mu_{\alpha_j},\sigma^2_{\alpha})$ for $j = 1 \ldots m$
+
+$\mu_{\alpha_j} = \gamma_0 + \gamma_1u_j$
+
+where $u_j$ is the school type (public or private).
+
+$\gamma_0 \sim Uniform(0,100)$
+
+$\gamma_1 \sim Normal(0,10^2)$
+
+$\sigma_{\alpha} \sim dt(0,2^2,1)$
+
+
+## The model DAG
+
+\footnotesize
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [compound = true, fontsize = 10]
+
+  subgraph cluster0 {
+  
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5]
+  y[label = <y<sub>ij</sub>>]
+  
+  node [shape = box,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  x[label = <x<sub>ij</sub>>] 
+
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  mu[label = <&mu;<sub>ij</sub>>] 
+
+
+
+  node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  i[label = i]
+
+
+  x->mu mu->y  i
+  
+
+}
+
+  subgraph cluster1 {
+  
+    node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  alpha[label = <&alpha;<sub>j</sub>>] 
+
+
+    node [shape = circle,
+        fixedsize = true,
+        width = 0.6] // sets as circles
+  mualpha[label = <&mu;<sub>&alpha;</sub><sub>j</sub>>] 
+
+
+    node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  j[label = j]
+
+
+alpha->mu j mualpha -> alpha
+  
+  }
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5]
+  sigma[label = <&sigma;>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  beta[label = <&beta;>] 
+
+
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  gamma0[label = <&gamma;<sub>0</sub>>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  gamma1[label = <&gamma;<sub>1</sub>>]
+
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  nualpha[label = <&sigma;<sub>&alpha;</sub>>]
+
+  
+  # node [shape = circle,
+  #       fixedsize = true,
+  #       color = red,
+  #       fontcolor = red,
+  #       peripheries = 1,
+  #       width = 0.5] // sets as circles
+  # betap[label = <&beta;<sub>P</sub>>]
+  # 
+  # node [shape = circle,
+  #       fixedsize = true,
+  #       color = red,
+  #       fontcolor = red,
+  #       peripheries = 1,
+  #       width = 0.5] // sets as circles
+  # nubeta[label = <&nu;<sub>&beta;</sub>>]
+
+
+
+
+ nualpha -> alpha  sigma->y beta -> mu gamma0 -> mualpha gamma1 -> mualpha
+}
+",
+width = 200, height = 200)
+```
+
+
+## The JAGS model
+
+\footnotesize
+
+```{r, echo = TRUE}
+bhregmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+ mu.i[i] <- alpha.j[school[i]] + beta*x.i[i]
+} # end i loop
+
+for(j in 1:n_school)
+{
+alpha.j[j] ~ dnorm(mu_alpha.j[j],sigma_alpha^-2)
+mu_alpha.j[j] <- gamma0 + gamma1*u.j[j]
+}
+
+beta ~ dnorm(0,10^-2)
+gamma0 ~ dunif(0,100)
+gamma1 ~ dnorm(0,10^-2)
+
+sigma ~ dunif(0,30)
+sigma_alpha ~ dt(0,2^-2,1)T(0,)
+ "
+```
+
+
+```{r, include = FALSE, echo = FALSE}
+bhregmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+ mu.i[i] <- alpha.j[school[i]] + beta*x.i[i]
+} # end i loop
+
+for(j in 1:n_school)
+{
+alpha.j[j] ~ dnorm(mu_alpha.j[j],sigma_alpha^-2)
+mu_alpha.j[j] <- gamma0 + gamma1*u.j[j]
+}
+
+beta ~ dnorm(0,10^-2)
+gamma0 ~ dunif(0,100)
+gamma1 ~ dnorm(0,10^-2)
+
+sigma ~ dunif(0,30)
+sigma_alpha ~ dt(0,2^-2,1)T(0,)
+
+
+  for(k in 1:npred)
+{
+ ytilde.k[k] ~ dnorm(mu_pred.k[k],sigma^-2) # data model
+ mu_pred.k[k] <- alpha.j[school_pred[k]] + beta*xpred.k[k]
+ mu_public_pred.k[k] <- mu_alpha.j[school_pred[k]] + beta*xpred.k[k]
+} # end k loop
+
+
+  for(i in 1:N)
+{
+ yrep[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+} # end k loop
+
+ }
+ "
+
+jags.data <- list(y.i = school_performance_dat$math,
+                  x.i = school_performance_dat$homework,
+                  u.j = school_performance_dat %>% group_by(schid) %>% summarise(public = unique(public)) %>% pull(public),
+                  n_school = school_performance_dat$schid %>% unique() %>% length(),
+                  school = school_performance_dat$schid, 
+                  N = nrow(school_performance_dat),
+                  xpred.k = rep(0:7, 10),
+                  school_pred = rep(1:10, each = 8),
+                  npred = 8*10)
+  
+parnames <- c("ytilde.k","mu_pred.k","mu_public_pred.k","yrep","alpha.j","beta","mu_alpha.j","gamma0","gamma1","sigma","sigma_alpha")
+  
+mod <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(bhregmodel))
+
+m <- mod$BUGSoutput$sims.matrix
+```
+
+## Results 
+
+\tiny 
+
+```{r}
+par_summary <- m %>% 
+                gather_rvars(alpha.j[1:10],beta,mu_alpha.j[1:10],sigma,sigma_alpha) %>% 
+                median_qi(.value)
+par_summary %>% print(n = 23)
+
+```
+
+
+## Results: School specific intercepts
+
+Recall: $\alpha_j \sim N(\gamma_0 + \gamma_1u_j, \sigma_{\alpha})$ 
+
+```{r, warning=FALSE}
+alpha_ind <- 1:jags.data$n_school
+alpha_samps <- m %>% spread_draws(alpha.j[alpha_ind]) %>% 
+    dplyr::select(alpha_ind, alpha.j) %>% dplyr::ungroup() %>% 
+    dplyr::mutate(alpha_ind = as.factor(alpha_ind))
+
+ggplot(alpha_samps, aes(x = alpha_ind, y = alpha.j)) +
+  geom_boxplot(colour = jags.data$u.j+1) +
+  xlab("school") +
+  geom_hline(yintercept = mod$BUGSoutput$mean$gamma0) +
+  geom_hline(yintercept = mod$BUGSoutput$mean$gamma0 + mod$BUGSoutput$mean$gamma1) 
+```
+
+## Results: Posterior samples of $\mu_{ij}$
+
+```{r}
+pred_ind <- 1:jags.data$npred
+pred_samps <- m %>% spread_draws(mu_pred.k[pred_ind]) 
+
+pred_samps$traj <- rep(1:dim(m)[1],jags.data$npred)
+pred_samps$x <- rep(jags.data$xpred.k, each = dim(m)[1])
+pred_samps$schid <- rep(jags.data$school_pred, each = dim(m)[1])
+
+pred_samps <- pred_samps %>% arrange(schid,x) %>% mutate(traj = as.factor(traj))
+
+```
+
+
+```{r}
+ggplot(school_performance_dat, aes(x = homework, y = math)) +
+  geom_point(alpha = 0.3) +
+  geom_line(data = pred_samps %>% filter(traj == c(1:20)),aes(x = x, y = mu_pred.k,group = traj),alpha = 0.3) +
+  theme_bw() +
+  facet_wrap(~schid)
+```
+
+## Results: Regression lines + 95% Credible Intervals
+
+```{r}
+pred_summary <- m %>% 
+                gather_rvars(mu_pred.k[pred_ind]) %>% 
+                median_qi(.value) %>% 
+                mutate(x = jags.data$xpred.k,
+                       schid = jags.data$school_pred)
+
+ggplot(pred_summary,aes(x = x, y = .value),alpha = 0.3) +
+  geom_line() +
+  geom_ribbon(data = pred_summary,aes(ymin = .lower, ymax = .upper), alpha = 0.2) +
+  geom_point(data = school_performance_dat, aes(x = homework,y=math)) +
+  theme_bw() +
+  facet_wrap(~schid)
+
+```
+
+## Results: Overall regression lines for each school type
+
+```{r}
+pred_public_summary <- m %>% 
+                gather_rvars(mu_public_pred.k[pred_ind]) %>% 
+                median_qi(.value) %>% 
+                mutate(x = jags.data$xpred.k,
+                       schid = jags.data$school_pred,
+                       public = ifelse(schid == 7, 0,1))
+
+ggplot(pred_public_summary,aes(x = x, y = .value),alpha = 0.3) +
+  geom_line() +
+  geom_ribbon(data = pred_public_summary,aes(ymin = .lower, ymax = .upper), alpha = 0.2) +
+  geom_point(data = school_performance_dat, aes(x = homework,y=math)) +
+  theme_bw() +
+  ylab("math score") +
+  xlab("homework") +
+  facet_wrap(~public)
+
+```
+
+## Posterior predicitive checks (density overlay)
+
+```{r}
+y <- school_performance_dat$math
+yrep <- mod$BUGSoutput$sims.list$yrep
+
+ppc_dens_overlay (y, yrep[1:50, ])
+```
+
+## Posterior predicitive checks (test statistic)
+
+Test statistic = max(y) - min(y)
+
+```{r, warning=FALSE}
+r <- function(y) max(y) - min(y)
+ppc_stat_grouped(y,yrep,group = school_performance_dat$public,  stat = "r",binwidth = 2)
+```
+
+## Further extend the model to include varying slopes
+
+\footnotesize
+
+$y_{i} \sim N(\mu_i,\sigma^2)$
+
+$\mu_i  = \alpha_{j[i]} + \beta_{j[i]} x_i$  for $i = 1 \ldots n$
+
+$\beta \sim Normal(\mu_{\beta}, \sigma_{\beta})$
+
+```{r}
+grViz("
+digraph boxes_and_circles {
+
+  # a 'graph' statement
+  graph [compound = true, fontsize = 10]
+
+  subgraph cluster0 {
+  
+  # several 'node' statements
+  node [shape = box,
+        width = 0.5]
+  y[label = <y<sub>ij</sub>>]
+  
+  node [shape = box,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  x[label = <x<sub>ij</sub>>] 
+
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  mu[label = <&mu;<sub>ij</sub>>] 
+
+
+
+  node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  i[label = i]
+
+
+  x->mu mu->y  i
+  
+
+}
+
+  subgraph cluster1 {
+  
+    node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  alpha[label = <&alpha;<sub>j</sub>>] 
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5] // sets as circles
+  beta[label = <&beta;<sub>j</sub>>] 
+
+
+    node [shape = circle,
+        fixedsize = true,
+        width = 0.6] // sets as circles
+  mualpha[label = <&mu;<sub>&alpha;</sub><sub>j</sub>>] 
+
+
+    node [shape = plaintext,
+  peripheries = 0,
+        fontname = Helvetica]
+  j[label = j]
+
+
+alpha->mu j mualpha -> alpha beta -> mu
+  
+  }
+
+  node [shape = circle,
+        fixedsize = true,
+        width = 0.5]
+  sigma[label = <&sigma;>]
+  
+
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  gamma0[label = <&gamma;<sub>0</sub>>]
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  gamma1[label = <&gamma;<sub>1</sub>>]
+
+  
+  node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  nualpha[label = <&sigma;<sub>&alpha;</sub>>]
+  
+    node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  mubeta[label = <&mu;<sub>&beta;</sub>>]
+
+     node [shape = circle,
+        fixedsize = true,
+        color = red,
+        fontcolor = red,
+        peripheries = 1,
+        width = 0.5] // sets as circles
+  sigbeta[label = <&sigma;<sub>&beta;</sub>>]
+
+  
+  # node [shape = circle,
+  #       fixedsize = true,
+  #       color = red,
+  #       fontcolor = red,
+  #       peripheries = 1,
+  #       width = 0.5] // sets as circles
+  # betap[label = <&beta;<sub>P</sub>>]
+  # 
+  # node [shape = circle,
+  #       fixedsize = true,
+  #       color = red,
+  #       fontcolor = red,
+  #       peripheries = 1,
+  #       width = 0.5] // sets as circles
+  # nubeta[label = <&nu;<sub>&beta;</sub>>]
+
+
+
+
+ nualpha -> alpha  sigma->y gamma0 -> mualpha gamma1 -> mualpha mubeta -> beta sigbeta -> beta
+}
+",
+width = 200, height = 200)
+```
+
+
+```{r}
+bhregmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+ mu.i[i] <- alpha.j[school[i]] + beta.j[school[i]]*x.i[i]
+} # end i loop
+
+for(j in 1:n_school)
+{
+alpha.j[j] ~ dnorm(mu_alpha.j[j],sigma_alpha^-2)
+mu_alpha.j[j] <- gamma0 + gamma1*u.j[j]
+
+beta.j[j] ~ dnorm(mu_beta,sigma_beta)
+}
+
+mu_beta ~ dnorm(0,10^-2)
+sigma_beta ~ dt(0,2^-2,1)T(0,)
+
+gamma0 ~ dunif(0,100)
+gamma1 ~ dnorm(0,10^-2)
+
+sigma ~ dunif(0,30)
+sigma_alpha ~ dt(0,2^-2,1)T(0,)
+
+}"
+```
+
+```{r, include = FALSE, echo = FALSE}
+bhregmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+ mu.i[i] <- alpha.j[school[i]] + beta.j[school[i]]*x.i[i]
+} # end i loop
+
+for(j in 1:n_school)
+{
+alpha.j[j] ~ dnorm(mu_alpha.j[j],sigma_alpha^-2)
+mu_alpha.j[j] <- gamma0 + gamma1*u.j[j]
+
+beta.j[j] ~ dnorm(mu_beta,sigma_beta)
+}
+
+mu_beta ~ dnorm(0,10^-2)
+sigma_beta ~ dt(0,2^-2,1)T(0,)
+
+gamma0 ~ dunif(0,100)
+gamma1 ~ dnorm(0,10^-2)
+
+sigma ~ dunif(0,30)
+sigma_alpha ~ dt(0,2^-2,1)T(0,)
+
+
+  for(k in 1:npred)
+{
+ ytilde.k[k] ~ dnorm(mu_pred.k[k],sigma^-2) # data model
+ mu_pred.k[k] <- alpha.j[school_pred[k]] + beta.j[school_pred[k]]*xpred.k[k]
+ mu_public_pred.k[k] <- mu_alpha.j[school_pred[k]] + mu_beta*xpred.k[k]
+} # end k loop
+
+
+  for(i in 1:N)
+{
+ yrep[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+} # end k loop
+
+ }
+ "
+
+jags.data2 <- list(y.i = school_performance_dat$math,
+                  x.i = school_performance_dat$homework,
+                  u.j = school_performance_dat %>% group_by(schid) %>% summarise(public = unique(public)) %>% pull(public),
+                  n_school = school_performance_dat$schid %>% unique() %>% length(),
+                  school = school_performance_dat$schid, 
+                  N = nrow(school_performance_dat),
+                  xpred.k = rep(0:7, 10),
+                  school_pred = rep(1:10, each = 8),
+                  npred = 8*10)
+  
+parnames2 <- c("ytilde.k","mu_pred.k","mu_public_pred.k","yrep","alpha.j","beta.j","mu_alpha.j","gamma0","gamma1","sigma","sigma_alpha")
+  
+mod2 <- jags(data = jags.data2, 
+              parameters.to.save = parnames2, 
+              model.file = textConnection(bhregmodel))
+
+m2 <- mod2$BUGSoutput$sims.matrix
+```
+
+
+## Results: Compare Regression lines 
+
+```{r, include = FALSE, echo = FALSE}
+regmodel = "
+model{
+  for(i in 1:N)
+{
+ y.i[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+ mu.i[i] <- alpha.j[school[i]] + beta.j[school[i]]*x.i[i]
+} # end i loop
+
+for(j in 1:n_school)
+{
+beta.j[j] ~ dnorm(0,10^-2)
+alpha.j[j] ~ dunif(0,100)
+}
+
+sigma ~ dunif(0,30)
+
+  for(k in 1:npred)
+{
+ ytilde.k[k] ~ dnorm(mu_pred.k[k],sigma^-2) # data model
+ mu_pred.k[k] <- alpha.j[school_pred[k]] + beta.j[school_pred[k]]*xpred.k[k]
+} # end k loop
+
+
+  for(i in 1:N)
+{
+ yrep[i] ~ dnorm(mu.i[i],sigma^-2) # data model
+} # end k loop
+
+ }
+ "
+
+jags.data3 <- list(y.i = school_performance_dat$math,
+                  x.i = school_performance_dat$homework,
+                  N = nrow(school_performance_dat),
+                  xpred.k = rep(0:7, 10),
+                  n_school = school_performance_dat$schid %>% unique() %>% length(),
+                  school = school_performance_dat$schid, 
+                  school_pred = rep(1:10, each = 8),
+                  npred = 8*10)
+  
+parnames3 <- c("ytilde.k","mu_pred.k","yrep","alpha.j","beta.j","sigma")
+  
+mod3 <- jags(data = jags.data3, 
+              parameters.to.save = parnames3, 
+              model.file = textConnection(regmodel))
+
+m3 <- mod3$BUGSoutput$sims.matrix
+```
+
+
+```{r}
+pred_summary2 <- m2 %>% 
+                gather_rvars(mu_pred.k[pred_ind]) %>% 
+                median_qi(.value) %>% 
+                mutate(x = jags.data2$xpred.k,
+                       schid = jags.data2$school_pred)
+
+pred_summary3 <- m3 %>% 
+                gather_rvars(mu_pred.k[pred_ind]) %>% 
+                median_qi(.value) %>% 
+                mutate(x = jags.data$xpred.k,
+                       schid = jags.data2$school_pred)
+
+
+ggplot(data = pred_summary,aes(x = x, y = .value),alpha = 0.3) +
+  geom_line(aes(colour = "BHM - common slope")) +
+  geom_line(data = pred_summary2,aes(x = x, y = .value, colour = "BHM - varying slope"),alpha = 0.3) +
+  geom_line(data = pred_summary3,aes(x = x, y = .value, colour = "SLR"),alpha = 0.3) +
+  #geom_ribbon(data = pred_summary,aes(ymin = .lower, ymax = .upper), alpha = 0.2) +
+  geom_point(data = school_performance_dat, aes(x = homework,y=math)) +
+  theme_bw() +
+  facet_wrap(~schid) +
+  labs(colour = "")
+
+```
+
+## Posterior predicitive checks (density overlay)
+
+```{r, warning=FALSE}
+y <- school_performance_dat$math
+yrep2 <- mod2$BUGSoutput$sims.list$yrep
+ppc_dens_overlay (y, yrep2[1:50, ])
+```
+
+## Posterior predicitive checks (test statistic)
+
+Test statistic = max(y) - min(y)
+
+```{r, warning = FALSE}
+r <- function(y) max(y) - min(y)
+ppc_stat_grouped(y,yrep2,group = school_performance_dat$public,  stat = "r",binwidth = 2)
+# ppc_stat_grouped(y,yrep,group = school_performance_dat$public,  stat = "median")
+```
+
