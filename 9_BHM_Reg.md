@@ -61,7 +61,7 @@ different schools.
 
 ## Visualising the Data
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 ## Hierarcical Regression on Individuals within Groups
 
@@ -103,7 +103,7 @@ $\sigma_{\alpha} \sim dt(0,2^2,1)$
 
 ## The model DAG
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
 ## The JAGS model
 
@@ -164,29 +164,29 @@ sigma_alpha ~ dt(0,2^-2,1)T(0,)
 
 Recall: $\alpha_j \sim N(\gamma_0 + \gamma_1u_j, \sigma_{\alpha})$
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ## Results: Posterior samples of $\mu_{ij}$
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ## Results: Regression lines + 95% Credible Intervals
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ## Results: Overall regression lines for each school type
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ## Posterior predicitive checks (density overlay)
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ## Posterior predicitive checks (test statistic)
 
 Test statistic = max(y) - min(y)
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ## Further extend the model to include varying slopes
 
@@ -196,18 +196,18 @@ $\mu_i = \alpha_{j[i]} + \beta_{j[i]} x_i$ for $i = 1 \ldots n$
 
 $\beta \sim Normal(\mu_{\beta}, \sigma_{\beta})$
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ## Results: Compare Regression lines
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ## Posterior predicitive checks (density overlay)
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ## Posterior predicitive checks (test statistic)
 
 Test statistic = max(y) - min(y)
 
-![](8_BHM_Reg_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](9_BHM_Reg_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
