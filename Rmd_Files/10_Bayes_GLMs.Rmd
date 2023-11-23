@@ -1,0 +1,231 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Bayesian Generalised Linear Models"
+output:
+  output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(DiagrammeR)
+library(tidyverse)
+library(rjags)
+library(R2jags)
+library(tidybayes)
+library(bayesplot)
+library(maps)
+library(maptools)
+
+
+
+fabric_faults <- read_csv("https://www.dropbox.com/s/czdos7zv76i2t8s/fabric_faults.csv?raw=1")
+
+```
+
+
+
+## Poisson Regression
+
+\footnotesize
+
+Suppose response $Y$ is a count response and takes values 0, 1, 2, 3, ...
+We could model $Y$ as:
+
+$$Y \sim \mbox{Poisson}(\mu), \;\;\; \mu > 0$$ 
+
+  - Poisson is a discrete probability distribution that expresses the probability of a given number of events occurring in a fixed interval of time or space (distance, area, volume etc).
+
+  - We assume these events occur with a known constant rate and independently of the time since the last event.
+
+## Poisson Regression
+\footnotesize
+
+It follows that:
+
+$$P[Y=k] = \displaystyle\frac{e^{-\mu}\mu^{k}}{k!}\;\;\; \mbox{for} \;\;\;k=0, 1, 2, ...$$ $$\mathbb{E}[Y] = \mu, \;\;\; \mbox{Var}[Y] = \mu.$$ 
+
+ 
+The Poisson regression model is of the form:
+$$\mbox{log}(\mu) = \beta_0 + \beta_1x_1 + ... + \beta_kx_k.$$
+
+  - Poisson regression is a __generalized linear model__ with a log __link function__ that relates $\mathbb{E}[Y]$ to the __systematic component__, which is a linear function of explanatory variables used in the model.
+
+
+## Why not use regular linear regression?
+
+\footnotesize
+
+  - So far, we discussed regression problems where the data were assumed to be normally distributed.
+
+- That's not always an appropriate assumption, for example when dealing with count data, e.g. death counts due to lip cancer in Scotland;
+
+  - Data not normally distributed.
+  
+  - Variance is not constant.
+
+Note: for sufficiently large values of $\mu$, the normal distribution with mean $\mu$ and variance $\mu$ can be used as an approximation to the Poisson distribution. Thus for large counts we may be able to use linear regression. 
+
+
+
+## Interpretation of parameter estimates
+\footnotesize
+
+Suppose $X_1$ increases from $x_1$ to $x_1+1$ and other $x$'s remain fixed. Then $\mu$ changes from 
+
+
+$$\mu(x) = \mbox{exp}(\beta_0 + \beta_1 x_1 + ... + \beta_k x_k)$$ 
+to 
+\begin{eqnarray*}
+\mu(x+1) &=& \mbox{exp}(\beta_0 + \beta_1 (x_1+1) + ... + \beta_k x_k) \\
+&=& \mu(x)e^{\beta_1}
+\end{eqnarray*}
+
+Each unit increase in $x_1$ multiplies the mean response by $e^{\beta_1}$. 
+
+If $\beta_1 = 0, e^{\beta_1}=1$ and the mean is unaffected by changes in $x_1$.
+
+<!-- ## Poisson Regression: Introduction -->
+<!-- \footnotesize -->
+<!--   - So far, we discussed regression problems where the data were assumed to be normally distributed. -->
+
+<!-- - That's not always an appropriate assumption, for example when dealing with -->
+
+<!--     - count data, e.g. death counts due to lip cancer in Scotland; -->
+
+<!-- - We will a discuss (hierarchical) poisson regression model to answer questions using these types of data.  -->
+
+<!-- - Suppose that $y_1,y_2,\ldots,y_n$ are independent count observations. -->
+
+<!-- - If $y_i\sim\mbox{Poisson}(\lambda)$ then -->
+
+<!-- $${\mathbb P}\{y_i=y\}=\frac{\lambda^y \exp(-\lambda)}{y!}, \mbox{ where $\lambda>0$.}$$ -->
+<!-- - Under this model,  -->
+<!-- $${\mathbb E}(y)=\lambda \mbox{ and } {\mathbb V}\mbox{ar}(y)=\lambda.$$ -->
+<!-- - So, the model cannot account for situations where $${\mathbb E}(y)\neq {\mathbb V}\mbox{ar}(y).$$ -->
+
+
+## Count Data Example - Fabric Faults
+\footnotesize
+
+  -  Data: Numbers of faults found in 32 rolls of fabric produced in a particular factory (Hinde, J. (1982))    
+  -  Predictor: the length of each roll. 
+  
+ 
+```{r, fig.width=4, fig.height=2.5}
+ggplot(fabric_faults, aes(x = length, y = faults)) +
+  geom_point()
+```
+
+
+## Model Specification
+
+\footnotesize
+
+  - A standard choice for count data is the Poisson data model:
+  
+$y_i|\lambda_i \sim$  Poisson($\lambda_i$)
+
+-  We need to specify how the fabric length $x_i$ 
+relates to the parameter of interest $\lambda_i$
+- We can try a regression model, e.g.
+log($\lambda_i$) = $\alpha + \beta (x_i - \bar{x})$
+- This is the Poisson regression model, which is an
+example of a generalized linear model, with
+
+  - linear predictor  $\alpha + \beta (x_i - \bar{x})$ (linear in the parameters) and
+  -  a log-link function, such that log(E($y_i$)) equals the linear predictor.
+
+
+
+## JAGS Specification
+\footnotesize
+$y_i|\lambda_i \sim$  Poisson($\lambda_i$)
+
+$log(\lambda_i) = \alpha + \beta (x_i - \bar{x})$
+
+$\alpha \sim N(0, 10^2)$
+
+$\beta \sim N (0,10^2)$
+
+```{r, echo = TRUE}
+poismodel = "
+model{
+	for( i in 1:n ) {
+ #Poisson likelihood for observed counts
+  y.i[i] ~ dpois(lambda.i[i])
+  lambda.i[i] <- exp(alpha + beta*(x.i[i] - mean(x.i)))
+	}
+ #Prior distributions
+  alpha ~ dnorm(0, 10^-2)
+  beta ~ dnorm(0, 10^-2)
+  
+  for(i in 1:n){yrep[i] ~ dpois(lambda.i[i])}
+}
+"
+```
+
+```{r, echo = FALSE}
+## Create the JAGS data list
+jags.data <- list(y.i = fabric_faults$faults, 
+                  x.i = fabric_faults$length, 
+                  n = nrow(fabric_faults))
+
+## Choose parameters to monitor
+parnames <- c("lambda.i","alpha","beta","yrep")
+
+mod <- jags(data = jags.data, 
+            parameters.to.save=parnames, 
+            model.file = textConnection(poismodel),
+            n.iter = 10000,
+            n.burnin = 2000,
+            n.thin = 5,
+            DIC = TRUE)
+
+## Create output objects
+m <- mod$BUGSoutput$sims.matrix
+
+```
+
+## Results: Parameters
+\footnotesize
+
+```{r, echo = FALSE}
+par_summary <- m %>% 
+                gather_rvars(alpha,beta) %>% 
+                median_qi(.value)
+par_summary
+```
+
+## Results: Model Fit
+
+```{r,echo = FALSE, include = FALSE}
+mu_ind <- 1:nrow(fabric_faults)
+mu_samps <- m %>% spread_draws(lambda.i[mu_ind]) 
+mu_summary <- mu_samps %>% 
+                median_qi(.width = 0.95)
+
+fabric_res <- fabric_faults %>% mutate(mu.i = mu_summary$lambda.i,
+                          lower = mu_summary$.lower,
+                          upper = mu_summary$.upper)
+
+p <- ggplot(fabric_res, aes(x = length, y = faults)) +
+  geom_point(alpha = 0.3) +
+  geom_line(aes(x = length, y = mu.i)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  theme_bw() 
+```
+
+```{r, echo = FALSE}
+p
+```
+
+## Posterior Predictive Check
+
+```{r}
+yrep <- mod$BUGSoutput$sims.list$yrep
+y <- fabric_faults$faults
+ppc_stat(y,yrep,  stat = "max",binwidth = 2)
+```
+
+
