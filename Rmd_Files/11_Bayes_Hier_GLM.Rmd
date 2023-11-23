@@ -1,0 +1,506 @@
+---
+title: "Bayesian Data Analysis"
+author: "Dr Niamh Cahill (she/her)"
+date: "Bayesian Hierarcical Models - Lip Cancer Case Study"
+output:
+  output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(DiagrammeR)
+library(tidyverse)
+library(rjags)
+library(R2jags)
+library(tidybayes)
+library(bayesplot)
+library(maps)
+library(maptools)
+
+
+
+fabric_faults <- read_csv("https://www.dropbox.com/s/czdos7zv76i2t8s/fabric_faults.csv?raw=1")
+
+```
+
+
+## Example: Lip cancer study
+\footnotesize
+
+  - We will now examine incidence rates of lip cancer deaths in males in 56 counties of Scotland, registered in 1975–1980.
+  
+    - Wakefield, Jonathan. “Disease mapping and spatial regression with count data.” Biostatistics 8 2 (2007): 158-83.
+  
+  - The data consist of the observed and expected numbers of deaths
+  
+    - For each region the observed frequency of deaths $y_i$ was recorded for $i = 1, 2 \ldots, n$.
+  
+    - An expected count $e_i$ was calculated based on age-specific reference rates (based on all data for all counties combined) and the population-by-age distribution in the county.
+ 
+ - A covariate measuring the proportion of the population engaged in agriculture, fishing, or forestry (AFF) is also available (exposure to sunlight is a risk factor for lip cancer)
+    
+  
+## Lip cancer study: more info
+\footnotesize
+  - $SMR_i = y_i/e_i$ is referred to as the standardized morbidity ratio i.e., the ratio of the number of deaths observed in a population over a given period to the number that would be expected over the same period. 
+  
+- An estimate of the true (but unknown) relative risk is
+denoted by $\theta_i$ in county $i$, which captures the relative difference in risk of dying for county $i$ as compared to the reference population. 
+
+- Problem: the SMRs in some regions are based on small $e_is$ (i.e., for 22 counties $e_i < 5$) and the estimates are thus very uncertain.
+  
+- Question: How to estimate county-specific relative risks?
+  
+- Recall: that we also have the information on the percentage of the population
+working outside (in agriculture etc.). How do we use this information to improve the relative risk estimates?
+
+## Estimating region specific mortality
+
+\footnotesize
+  - As usual, we need to specify how the data relates to the parameter
+of interest, so here how death counts $y_i$ relate to relative risk $\theta_i$.
+
+- A standard choice for count data is the Poisson data model:
+$y_i|\lambda_i \sim Poisson(\lambda_i)$, where $\lambda_i = E(y_i) = Var(y_i).$
+
+- For the lip cancer data set, let's consider the Poisson model with
+$\lambda_i = \theta_ie_i$, such that the mean death count is given by the expected
+death count times the relative risk.
+
+-  How to estimate $\theta_i$?
+
+  - Three choices:
+  
+      1. Estimate $\theta_i$ for each county independently. 
+
+      2. Assume $\theta_i$ is the same for all counties, $\theta_i$ = $\theta$: we would no longer
+investigate whether there are differences in relative risks.
+
+      3. Use a hierarchical model for the $\theta_i$'s to exchange information across
+counties.
+
+## Hierarchical model for estimating relative risks
+
+\footnotesize
+
+  - We will assume the data model: $y_i|\theta_i \sim Poisson(\theta_ie_i)$, $\theta_i > 0$.
+
+  - A Gamma distribution results in full conditionals in closed form:
+if we set 
+
+$$\theta_i|\alpha, \beta \sim Gamma(\alpha, \beta)$$
+with $E(\theta_i) = \alpha/\beta$ and $Var(\theta_i) = \alpha/\beta^2$, then we get a nice
+interpretable form for the posterior  of $\theta_i$:
+
+$$\theta_i|\alpha, \beta,y \sim Gamma(\alpha + y_i, \beta + e_i)$$
+
+  - Think of $\alpha$ as "the prior number of death counts"
+
+  - Think of $\beta$ as the "prior expected counts"
+
+  - The posterior mean will be a weighted sum of the prior mean and the observed rel. risks
+
+$\frac{\alpha + y_i}{\beta + e_i} = w_i \frac{\alpha}{\beta} + (1-w_i) \frac{y_i}{e_i}$
+
+where the weight (or shrinkage factor) $w_i = \frac{\beta}{\beta + e_i}$
+
+## JAGS Model
+
+\footnotesize
+
+```{r, echo = TRUE}
+bhpoismodel = "
+model{
+for(i in 1:n) {
+# Poisson likelihood (data model)
+y.i[i] ~ dpois(lambda.i[i])
+lambda.i[i] <- theta.i[i]*e.i[i]
+
+# prior for theta
+theta.i[i] ~ dgamma(alpha,beta)
+# Shrinkage factor
+w.i[i] <- beta/(beta + expect.i[i])
+}
+# Prior distributions for hyper parameters
+alpha ~ dexp(0.1)
+beta ~ dexp(0.1)
+# store group mean and across-group variance
+mtheta <- alpha/beta
+sdtheta <- sqrt(alpha/(beta^2))
+}
+"
+
+```
+
+```{r, echo = FALSE, include=FALSE}
+
+library(SpatialEpi)
+data(scotland)
+
+lip_cancer_dat <- scotland$data
+lip_cancer_dat <- lip_cancer_dat %>% mutate(SMR = cases/expected)
+
+bhpoismodel = "
+model{
+for(i in 1:n) {
+# Poisson likelihood (data model)
+y.i[i] ~ dpois(lambda.i[i])
+lambda.i[i] <- theta.i[i]*e.i[i]
+
+# prior for theta
+theta.i[i] ~ dgamma(alpha,beta)
+# Shrinkage factor
+w.i[i] <- beta/(beta + e.i[i])
+}
+# Prior distributions for hyper parameters
+alpha ~ dexp(0.1)
+beta ~ dexp(0.1)
+# store group mean and across-group variance
+mtheta <- alpha/beta
+sdtheta <- sqrt(alpha/(beta^2))
+}
+"
+jags.data <- list(y.i = lip_cancer_dat$cases,
+                  e.i = lip_cancer_dat$expected,
+                  n = nrow(lip_cancer_dat))
+  
+parnames <- c("alpha","beta","mtheta","sdtheta","w.i","theta.i")
+  
+mod <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(bhpoismodel),
+              n.iter = 6000,
+              n.burnin = 2000,
+              n.thin = 4)
+
+m <- mod$BUGSoutput$sims.matrix
+```
+
+## Let's explore the impact of the shrinkage 
+
+\footnotesize
+```{r, fig.width=9, fig.height=5}
+index <- 1:nrow(lip_cancer_dat)
+par_summary <- m %>% 
+                gather_rvars(w.i[index],theta.i[index]) %>% 
+                median_qi(.value)
+
+par_wide <- par_summary %>% 
+              select(index, .variable, .value) %>% 
+              pivot_wider(id_cols = index, 
+                          values_from = .value,
+                          names_from = .variable) %>% 
+              mutate(SMR = lip_cancer_dat$SMR,
+                     expected = ifelse(lip_cancer_dat$expected<5,"< 5",">/= 5"))
+prior_mean <- mod$BUGSoutput$mean$alpha/ mod$BUGSoutput$mean$beta
+
+p1 <- ggplot(par_wide, aes(x = SMR, y = theta.i)) +
+  geom_point(aes(colour = expected)) +
+  geom_line(aes(x = SMR, y = SMR)) +
+  geom_segment(aes(x = 1.3, y = prior_mean, xend = 0, yend = prior_mean),
+                  arrow = arrow(length = unit(0.6, "cm"))) +
+  annotate("text", x = 0.7, y = prior_mean + 0.4, label = "prior mean = 1.4")
+
+p2 <- ggplot(par_wide, aes(x = lip_cancer_dat$expected, y = w.i)) +
+  geom_point(aes(colour = expected)) +
+  ylab("Shrinkage factor (w.i)") +
+  xlab("Expected")
+
+ggpubr::ggarrange(p1,p2, common.legend = T)
+
+```
+
+This behavior illustrates both the potential benefits and hazards of smoothing; 
+
+  - the estimates of $\theta_i$ will be less variable than the observed SMRs, 
+  - but an outlying estimate that is not based on a large expected number will be shrunk, and we may miss an important excess.
+
+## Let's visualise some results
+
+Raw and smoothed estimates in 56 counties of Scotland. 
+
+```{r}
+shapefile <- scotland$spatial.polygon
+
+#Reshape for ggplot2 using the Broom package
+mapdata <- broom::tidy(shapefile) #This might take a few minutes
+lip_cancer_dat <- lip_cancer_dat %>% 
+                      mutate(id =  mapdata$id %>% unique(),
+                      SMR = cases/expected,
+                      theta.i = mod$BUGSoutput$mean$theta.i)
+
+#Join mydata with mapdata
+df <- plyr::join(mapdata, lip_cancer_dat, by="id")
+
+
+#Create the heatmap using the ggplot2 package
+gg1 <- ggplot() + geom_polygon(data = df, aes(x = long, y = lat, group = group, fill = SMR), color = "#FFFFFF", size = 0.25)+ 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "white",limits = c(0,7))+
+  coord_fixed(1)+
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme(axis.title.x=element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  theme(axis.title.y=element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+#Create the heatmap using the ggplot2 package
+gg2 <- ggplot() + geom_polygon(data = df, aes(x = long, y = lat, group = group, fill = theta.i), color = "#FFFFFF", size = 0.25)+ 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "white",limits = c(0,7))+
+  coord_fixed(1)+
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme(axis.title.x=element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  theme(axis.title.y=element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggpubr::ggarrange(gg1 + ggtitle("Raw SMR Estimates") ,gg2 + ggtitle("Model Estimates"))
+
+```
+
+## Add in predictors for estimating the SMR
+
+\footnotesize
+
+  - We have information on the the proportion of the population engaged in agriculture, fishing, or forestry (AFF) for each county ($x_i$)
+  
+  - A possible set-up:
+  
+$$y_i|\lambda_i \sim Poisson(\lambda_i)$$
+
+$$\lambda_i = \theta_i e_i$$
+$$log(\theta_i) = \alpha_i + \beta(x_i - \bar{x})$$
+$$\alpha_i|\mu_{\alpha},\sigma_{\alpha} \sim N(\mu_{\alpha},\sigma_{\alpha})$$
+
+  - Note: We switched to using normal distributions for the log-transformed county-specific intercepts.
+
+## Add in predictors for estimating the SMR
+
+\footnotesize
+
+```{r, echo=TRUE}
+bhpoismodel2 = "
+model{
+for(i in 1:n) {
+# Poisson likelihood (data model)
+y.i[i] ~ dpois(lambda.i[i])
+lambda.i[i] <- theta.i[i]*e.i[i]
+
+# prior for theta
+log(theta.i[i]) <- ltheta.i[i]
+
+ltheta.i[i] <- alpha.i[i] + beta*(x.i[i]-mean(x.i))
+alpha.i[i] ~ dnorm(mu_alpha, sigma_alpha^-2)
+
+}
+# Prior distributions for hyper parameters
+mu_alpha ~ dnorm(0,0.01)
+beta ~ dnorm(0,0.01)
+sigma_alpha ~ dt(0,2^-2,1)T(0,)
+}
+"
+
+```
+
+```{r, echo = FALSE, include=FALSE}
+
+bhpoismodel2 = "
+model{
+for(i in 1:n) {
+# Poisson likelihood (data model)
+y.i[i] ~ dpois(lambda.i[i])
+lambda.i[i] <- theta.i[i]*e.i[i]
+
+# prior for theta
+log(theta.i[i]) <- ltheta.i[i]
+
+ltheta.i[i] <- alpha.i[i] + beta*(x.i[i]-mean(x.i))
+alpha.i[i] ~ dnorm(mu_alpha, sigma_alpha^-2)
+
+
+}
+# Prior distributions for hyper parameters
+mu_alpha ~ dnorm(0,0.01)
+beta ~ dnorm(0,0.01)
+sigma_alpha ~ dt(0,2^-2,1)T(0,)
+}
+"
+
+jags.data <- list(y.i = lip_cancer_dat$cases,
+                  e.i = lip_cancer_dat$expected,
+                  x.i = lip_cancer_dat$AFF,
+                  n = nrow(lip_cancer_dat))
+  
+parnames <- c("alpha.i","beta","mu_alpha","sigma_alpha","theta.i")
+  
+mod <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(bhpoismodel2),
+              n.iter = 10000,
+              n.burnin = 2000,
+              n.thin = 4)
+
+m <- mod$BUGSoutput$sims.matrix
+```
+
+
+## Let's look at $exp(\alpha_i)$ 
+
+\footnotesize
+
+  - Boxplots are shown for $exp(\alpha_i)$ which is the expected SMR for counties where $\sim 9 \%$ work outside.
+
+  - The solid black line is $exp(\mu_{\alpha})$ which is the expected SMR across all counties when $\sim 9\%$ work outside.
+
+```{r, warning=FALSE, fig.width=6,fig.height=4}
+
+alpha_ind <- 1:jags.data$n
+alpha_samps <- m %>% spread_draws(alpha.i[alpha_ind]) %>% 
+    dplyr::select(alpha_ind, alpha.i) %>% dplyr::ungroup() %>% 
+    dplyr::mutate(alpha_ind = factor(alpha_ind, labels = lip_cancer_dat$county.names),
+                  exp_alpha.i = exp(alpha.i))
+
+colour_e <- ifelse(lip_cancer_dat$expected<5,"red","yellow")
+
+ggplot(alpha_samps, aes(x = alpha_ind, y = exp_alpha.i)) +
+  geom_boxplot(colour = colour_e,outlier.shape = NA) +
+  geom_hline(yintercept = exp(mod$BUGSoutput$mean$mu_alpha))+
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  xlab("") +
+  ylab("exp(alpha.i)")
+
+```
+
+## Compare $exp(\alpha_i)$ for an independent vs hierarchical model
+
+\footnotesize
+
+  - The comparison below is for 3 counties that have expected $<5$
+  
+  - Note the difference in the uncertainty!!
+
+
+```{r, echo = FALSE, include = FALSE}
+bhpoismodel_alt = "
+model{
+for(i in 1:n) {
+# Poisson likelihood (data model)
+y.i[i] ~ dpois(lambda.i[i])
+lambda.i[i] <- theta.i[i]*e.i[i]
+
+# prior for theta
+log(theta.i[i]) <- ltheta.i[i]
+
+ltheta.i[i] <- alpha.i[i] + beta*(x.i[i]-mean(x.i))
+alpha.i[i] ~ dnorm(0,0.01)
+
+}
+# Prior distributions for hyper parameters
+beta ~ dnorm(0,0.01)
+}
+"
+
+parnames <- c("alpha.i","beta","theta.i")
+  
+mod_alt <- jags(data = jags.data, 
+              parameters.to.save = parnames, 
+              model.file = textConnection(bhpoismodel_alt),
+              n.iter = 10000,
+              n.burnin = 2000,
+              n.thin = 4)
+
+m_alt <- mod_alt$BUGSoutput$sims.matrix
+
+alpha_samps_alt <- m_alt %>% spread_draws(alpha.i[alpha_ind]) %>% 
+    dplyr::select(alpha_ind, alpha.i) %>% dplyr::ungroup() %>% 
+    dplyr::mutate(alpha_ind = factor(alpha_ind, labels = lip_cancer_dat$county.names),
+                  exp_alpha.i = exp(alpha.i))
+
+alpha_samps3<- alpha_samps %>% filter(alpha_ind %in% lip_cancer_dat$county.names[c(1,4,6)]) %>% mutate(model = "hierarcical")
+
+alpha_samps_alt3 <- alpha_samps_alt %>% filter(alpha_ind %in% lip_cancer_dat$county.names[c(1,4,6)]) %>% mutate(model = "independent")
+
+alpha_dat3 <- full_join(alpha_samps3,alpha_samps_alt3)
+
+scales <- list(
+  scale_x_continuous(limits = c(0,3)),
+  scale_x_continuous(limits = c(0, 20))
+)
+
+p <- ggplot(alpha_dat3, aes(y = alpha_ind, x = exp_alpha.i)) +
+  geom_boxplot(outlier.shape = NA) +
+  #geom_hline(yintercept = exp(mod$BUGSoutput$mean$mu_alpha))+
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  xlab("") +
+  ylab("exp(alpha.i)") +
+  xlim(0,16) +
+  geom_vline(xintercept = exp(mod$BUGSoutput$mean$mu_alpha)) +
+  facet_wrap(~model, scales = "free_x") 
+```
+
+```{r, echo = FALSE, warning = FALSE, fig.width=6, fig.height=3}
+p 
+```
+
+
+
+
+## Let's look at $\theta_i$
+
+```{r}
+theta_ind <- 1:jags.data$n
+theta_samps <- m %>% spread_draws(theta.i[theta_ind]) %>% 
+    dplyr::select(theta_ind, theta.i) %>% dplyr::ungroup() %>% 
+    dplyr::mutate(theta_ind = factor(theta_ind, labels = lip_cancer_dat$county.names))
+
+colour_e <- ifelse(lip_cancer_dat$expected<5,"red","yellow")
+
+ggplot(theta_samps, aes(x = theta_ind, y = theta.i)) +
+  geom_boxplot(colour = colour_e,outlier.shape = NA) +
+  geom_point(data = lip_cancer_dat, aes(x = theta_ind, y = SMR, colour = "observed SMR")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  xlab("") +
+  labs(colour = "") +
+  ylab("theta.i")
+
+```
+
+## Let's visualise on a map
+
+\footnotesize
+
+```{r, fig.width=12,fig.height=6}
+shapefile <- scotland$spatial.polygon
+
+#Reshape for ggplot2 using the Broom package
+mapdata <- broom::tidy(shapefile) #This might take a few minutes
+lip_cancer_dat <- lip_cancer_dat %>% 
+                      mutate(id =  mapdata$id %>% unique(),
+                      theta.i = mod$BUGSoutput$mean$theta.i)
+
+#Join mydata with mapdata
+df <- plyr::join(mapdata, lip_cancer_dat, by="id")
+
+#Create the heatmap using the ggplot2 package
+gg3 <- ggplot() + geom_polygon(data = df, aes(x = long, y = lat, group = group, fill = theta.i), color = "#FFFFFF", size = 0.25)+ 
+  scale_fill_gradient(low = "yellow", high = "red", na.value = "white",limits = c(0,7))+
+  coord_fixed(1)+
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme(axis.title.x=element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  theme(axis.title.y=element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  ggtitle("with predictor")
+
+#Create the heatmap using the ggplot2 package
+gg4 <- ggplot() + geom_polygon(data = df, aes(x = long, y = lat, group = group, fill = AFF), color = "#FFFFFF", size = 0.25)+ 
+  scale_fill_gradient(low = "green", high = "blue", na.value = "white",limits = c(0,0.3))+
+  coord_fixed(1)+
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  theme(axis.title.x=element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  theme(axis.title.y=element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()) 
+
+
+ggpubr::ggarrange(gg1 + ggtitle("Raw SMR"),gg2 + ggtitle("w/o predictor"),gg3, gg4)
+
+```
